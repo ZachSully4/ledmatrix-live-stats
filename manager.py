@@ -83,6 +83,9 @@ class LivePlayerStatsPlugin(BasePlugin):
         self.games_data = []
         self.ticker_image = None
 
+        # Enable high FPS scrolling mode
+        self.enable_scrolling = True
+
         self.logger.info(f"LivePlayerStats initialized with {len(self.league_rotation_order)} enabled leagues")
 
     def _build_rotation_order(self):

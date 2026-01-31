@@ -76,9 +76,14 @@ class DataFetcher:
 
             # Extract live games
             live_games = []
+            total_events = len(scoreboard.get('events', []))
+            self.logger.debug(f"Processing {total_events} total events for {league_key}")
+
             for event in scoreboard.get('events', []):
                 # Only process games that are live (in progress)
                 status_state = event.get('status', {}).get('type', {}).get('state')
+                self.logger.debug(f"Event status: {status_state}")
+
                 if status_state != 'in':
                     continue
 
@@ -86,8 +91,11 @@ class DataFetcher:
                 game_info = self._parse_game_event(event, league_key)
                 if game_info:
                     live_games.append(game_info)
+                    self.logger.info(f"Parsed live game: {game_info.get('away_abbr')} @ {game_info.get('home_abbr')}, "
+                                   f"home_leaders: {bool(game_info.get('home_leaders'))}, "
+                                   f"away_leaders: {bool(game_info.get('away_leaders'))}")
 
-            self.logger.info(f"Found {len(live_games)} live games in {league_key}")
+            self.logger.info(f"Found {len(live_games)} live games in {league_key} (out of {total_events} total)")
             return live_games
 
         except Exception as e:
