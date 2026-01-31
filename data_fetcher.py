@@ -17,6 +17,9 @@ LEAGUE_MAP = {
     'ncaaf': ('football', 'college-football')
 }
 
+# NCAA API base URL
+NCAA_API_BASE = "https://ncaa-api.henrygd.me"
+
 # Basketball stat array indices (from ESPN API)
 BASKETBALL_STAT_INDICES = {
     'PTS': 15,  # Points
@@ -55,6 +58,10 @@ class DataFetcher:
         if league_key not in LEAGUE_MAP:
             self.logger.warning(f"Unknown league: {league_key}")
             return []
+
+        # Use NCAA API for college basketball (better player stats)
+        if league_key == 'ncaam':
+            return self._fetch_ncaa_basketball_games(max_games)
 
         sport, league = LEAGUE_MAP[league_key]
 
@@ -487,3 +494,210 @@ class DataFetcher:
 
         # Single name or unknown - truncate if too long
         return full_name[:10] if len(full_name) > 10 else full_name
+
+    def _fetch_ncaa_basketball_games(self, max_games: int = 50) -> List[Dict]:
+        """
+        Fetch live NCAA Men's Basketball games using NCAA API.
+
+        Args:
+            max_games: Maximum number of games to return
+
+        Returns:
+            List of game dictionaries with extracted stats
+        """
+        try:
+            # Get today's date for scoreboard
+            today = datetime.now()
+            year = today.year
+            month = str(today.month).zfill(2)
+            day = str(today.day).zfill(2)
+
+            # NCAA API scoreboard endpoint
+            url = f"{NCAA_API_BASE}/scoreboard/basketball-men/d1/{year}/{month}/{day}"
+            self.logger.debug(f"Fetching NCAA scoreboard from: {url}")
+
+            # Use requests directly since NCAA API isn't cached by api_helper
+            import requests
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            scoreboard = response.json()
+
+            if not scoreboard or 'games' not in scoreboard:
+                self.logger.debug("No scoreboard data from NCAA API")
+                return []
+
+            # Extract live games
+            live_games = []
+            total_events = len(scoreboard.get('games', []))
+            self.logger.debug(f"Processing {total_events} total NCAA games")
+
+            for game_wrapper in scoreboard.get('games', []):
+                # Stop if we've reached max games
+                if len(live_games) >= max_games:
+                    self.logger.info(f"Reached max_games limit ({max_games}) for NCAA")
+                    break
+
+                game = game_wrapper.get('game', {})
+                game_state = game.get('gameState', '')
+                game_id = game.get('gameID')
+
+                # Log game status for debugging
+                away_name = game.get('away', {}).get('names', {}).get('char6', '?')
+                home_name = game.get('home', {}).get('names', {}).get('char6', '?')
+                self.logger.info(f"NCAA Game: {away_name} @ {home_name}, State: {game_state}")
+
+                # Only process live games
+                if game_state != 'live':
+                    continue
+
+                # Parse game data
+                game_info = self._parse_ncaa_game(game)
+                if game_info:
+                    live_games.append(game_info)
+                    self.logger.info(f"Parsed NCAA game: {game_info.get('away_abbr')} @ {game_info.get('home_abbr')}, "
+                                   f"home_leaders: {bool(game_info.get('home_leaders'))}, "
+                                   f"away_leaders: {bool(game_info.get('away_leaders'))}")
+
+            self.logger.info(f"Found {len(live_games)} live NCAA games (out of {total_events} total, max={max_games})")
+            return live_games
+
+        except Exception as e:
+            self.logger.error(f"Error fetching NCAA games: {e}", exc_info=True)
+            return []
+
+    def _parse_ncaa_game(self, game: Dict) -> Optional[Dict]:
+        """
+        Parse NCAA game data and fetch boxscore for player stats.
+
+        Args:
+            game: Game dictionary from NCAA API scoreboard
+
+        Returns:
+            Dictionary with game info and stat leaders, or None if parsing fails
+        """
+        try:
+            game_id = game.get('gameID')
+            home = game.get('home', {})
+            away = game.get('away', {})
+
+            # Extract basic game info
+            game_data = {
+                'id': game_id,
+                'home_abbr': home.get('names', {}).get('char6', 'HOME'),
+                'away_abbr': away.get('names', {}).get('char6', 'AWAY'),
+                'home_score': int(home.get('score', 0)),
+                'away_score': int(away.get('score', 0)),
+                'period': 0,  # NCAA API uses currentPeriod text
+                'clock': game.get('contestClock', ''),
+                'period_text': game.get('currentPeriod', ''),
+            }
+
+            # Fetch boxscore for player stats
+            if game_id:
+                boxscore = self._fetch_ncaa_boxscore(game_id)
+                if boxscore:
+                    game_data['home_leaders'] = self._extract_ncaa_basketball_leaders(boxscore, is_home=True)
+                    game_data['away_leaders'] = self._extract_ncaa_basketball_leaders(boxscore, is_home=False)
+
+            return game_data
+
+        except Exception as e:
+            self.logger.warning(f"Error parsing NCAA game: {e}")
+            return None
+
+    def _fetch_ncaa_boxscore(self, game_id: str) -> Optional[Dict]:
+        """
+        Fetch NCAA boxscore data.
+
+        Args:
+            game_id: NCAA game ID
+
+        Returns:
+            Boxscore data or None if unavailable
+        """
+        try:
+            url = f"{NCAA_API_BASE}/game/{game_id}/boxscore"
+            self.logger.debug(f"Fetching NCAA boxscore from: {url}")
+
+            import requests
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            return response.json()
+
+        except Exception as e:
+            self.logger.debug(f"Error fetching NCAA boxscore for game {game_id}: {e}")
+            return None
+
+    def _extract_ncaa_basketball_leaders(self, boxscore: Dict, is_home: bool) -> Optional[Dict]:
+        """
+        Extract basketball leaders from NCAA boxscore data.
+
+        Args:
+            boxscore: Boxscore response from NCAA API
+            is_home: True for home team, False for away team
+
+        Returns:
+            Leaders dict with PTS/REB/AST leaders or None
+        """
+        try:
+            team_boxscore = boxscore.get('teamBoxscore', [])
+            if not team_boxscore:
+                return None
+
+            # Find the team (home or away)
+            team_data = None
+            for team in team_boxscore:
+                team_info_list = boxscore.get('teams', [])
+                for team_info in team_info_list:
+                    if team_info.get('teamId') == team.get('teamId'):
+                        if team_info.get('isHome') == is_home:
+                            team_data = team
+                            break
+
+            if not team_data:
+                self.logger.debug(f"No team data found for {'home' if is_home else 'away'} in NCAA boxscore")
+                return None
+
+            player_stats = team_data.get('playerStats', [])
+            if not player_stats:
+                return None
+
+            # Find leaders for PTS, REB, AST
+            leaders = {}
+            max_pts = {'name': None, 'value': 0}
+            max_reb = {'name': None, 'value': 0}
+            max_ast = {'name': None, 'value': 0}
+
+            for player in player_stats:
+                first_name = player.get('firstName', '')
+                last_name = player.get('lastName', '')
+                full_name = f"{first_name} {last_name}".strip()
+
+                # Get stats (NCAA API returns strings)
+                try:
+                    pts = int(player.get('points', 0))
+                    reb = int(player.get('totalRebounds', 0))
+                    ast = int(player.get('assists', 0))
+
+                    if pts > max_pts['value']:
+                        max_pts = {'name': self._abbreviate_name(full_name), 'value': pts}
+                    if reb > max_reb['value']:
+                        max_reb = {'name': self._abbreviate_name(full_name), 'value': reb}
+                    if ast > max_ast['value']:
+                        max_ast = {'name': self._abbreviate_name(full_name), 'value': ast}
+
+                except (ValueError, TypeError):
+                    continue
+
+            if max_pts['name']:
+                leaders['PTS'] = max_pts
+            if max_reb['name']:
+                leaders['REB'] = max_reb
+            if max_ast['name']:
+                leaders['AST'] = max_ast
+
+            return leaders if leaders else None
+
+        except Exception as e:
+            self.logger.debug(f"Error extracting NCAA basketball leaders: {e}")
+            return None
