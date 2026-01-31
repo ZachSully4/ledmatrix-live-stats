@@ -66,10 +66,14 @@ class LivePlayerStatsPlugin(BasePlugin):
         self.scroll_helper = ScrollHelper(
             self.display_manager.width,
             self.display_manager.height,
-            scroll_speed=display_opts.get('scroll_speed', 1.0),
-            scroll_delay=display_opts.get('scroll_delay', 0.02),
-            target_fps=display_opts.get('target_fps', 120)
+            logger=self.logger
         )
+
+        # Configure scroll settings
+        self.scroll_helper.set_frame_based_scrolling(True)
+        self.scroll_helper.set_scroll_speed(display_opts.get('scroll_speed', 1.0))
+        self.scroll_helper.set_scroll_delay(display_opts.get('scroll_delay', 0.02))
+        self.scroll_helper.set_target_fps(display_opts.get('target_fps', 120))
 
         # Build league rotation order
         self.league_rotation_order = self._build_rotation_order()
