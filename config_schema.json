@@ -1,0 +1,124 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable or disable the plugin"
+    },
+    "display_options": {
+      "type": "object",
+      "properties": {
+        "scroll_speed": {
+          "type": "number",
+          "default": 1.0,
+          "minimum": 0.1,
+          "maximum": 10.0,
+          "description": "Scrolling speed in pixels per frame"
+        },
+        "scroll_delay": {
+          "type": "number",
+          "default": 0.02,
+          "minimum": 0.001,
+          "maximum": 1.0,
+          "description": "Delay between scroll frames in seconds"
+        },
+        "target_fps": {
+          "type": "integer",
+          "default": 120,
+          "minimum": 30,
+          "maximum": 200,
+          "description": "Target frames per second for scrolling"
+        }
+      },
+      "default": {}
+    },
+    "data_settings": {
+      "type": "object",
+      "properties": {
+        "update_interval": {
+          "type": "integer",
+          "default": 60,
+          "minimum": 30,
+          "maximum": 600,
+          "description": "Seconds between data updates"
+        },
+        "cache_ttl": {
+          "type": "integer",
+          "default": 60,
+          "minimum": 30,
+          "maximum": 1800,
+          "description": "Cache time-to-live in seconds"
+        }
+      },
+      "default": {}
+    },
+    "leagues": {
+      "type": "object",
+      "properties": {
+        "nba": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "priority": {
+              "type": "integer",
+              "default": 1,
+              "minimum": 1
+            }
+          },
+          "default": {"enabled": true, "priority": 1}
+        },
+        "nfl": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "priority": {
+              "type": "integer",
+              "default": 2,
+              "minimum": 1
+            }
+          },
+          "default": {"enabled": true, "priority": 2}
+        },
+        "ncaam": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "priority": {
+              "type": "integer",
+              "default": 3,
+              "minimum": 1
+            }
+          },
+          "default": {"enabled": true, "priority": 3}
+        },
+        "ncaaf": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "priority": {
+              "type": "integer",
+              "default": 4,
+              "minimum": 1
+            }
+          },
+          "default": {"enabled": false, "priority": 4}
+        }
+      },
+      "default": {}
+    }
+  }
+}
