@@ -153,6 +153,7 @@ class DataFetcher:
             # Extract basic game info
             game_data = {
                 'id': game_id,
+                'league': league_key,
                 'home_abbr': home_team.get('team', {}).get('abbreviation', 'HOME'),
                 'away_abbr': away_team.get('team', {}).get('abbreviation', 'AWAY'),
                 'home_score': int(home_team.get('score', 0)),
@@ -583,6 +584,7 @@ class DataFetcher:
             # Extract basic game info
             game_data = {
                 'id': game_id,
+                'league': 'ncaam',
                 'home_abbr': home.get('names', {}).get('char6', 'HOME'),
                 'away_abbr': away.get('names', {}).get('char6', 'AWAY'),
                 'home_score': int(home.get('score', 0)),

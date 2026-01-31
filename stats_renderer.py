@@ -6,6 +6,8 @@ Handles PIL-based rendering of player stat cards for scrolling display.
 
 from typing import Dict, Optional
 from PIL import Image, ImageDraw, ImageFont
+from pathlib import Path
+import os
 
 
 # Color scheme
@@ -31,24 +33,25 @@ class StatsRenderer:
         self.logger = logger
         self.display_height = display_height
 
+        # Find LEDMatrix root directory
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        self.project_root = Path(os.path.abspath(os.path.join(current_dir, '..', '..', '..')))
+        self.logger.debug(f"Project root: {self.project_root}")
+
         # Load fonts (using compact fonts for small display)
-        import os
         try:
             # Try to get 4x6 font for compact display
             self.small_font = ImageFont.load_default()
             self.medium_font = ImageFont.load_default()
 
             # Attempt to load better fonts if available
-            # Try to find the LEDMatrix root directory
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            ledmatrix_root = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
-            font_dir = os.path.join(ledmatrix_root, 'assets', 'fonts')
+            font_dir = self.project_root / 'assets' / 'fonts'
 
             try:
-                font_path_4x6 = os.path.join(font_dir, '4x6-font.ttf')
-                if os.path.exists(font_path_4x6):
-                    self.small_font = ImageFont.truetype(font_path_4x6, 6)
-                    self.medium_font = ImageFont.truetype(font_path_4x6, 8)
+                font_path_4x6 = font_dir / '4x6-font.ttf'
+                if font_path_4x6.exists():
+                    self.small_font = ImageFont.truetype(str(font_path_4x6), 6)
+                    self.medium_font = ImageFont.truetype(str(font_path_4x6), 8)
             except Exception as e:
                 self.logger.debug(f"Could not load custom fonts: {e}")
                 pass
@@ -58,21 +61,20 @@ class StatsRenderer:
             self.small_font = ImageFont.load_default()
             self.medium_font = ImageFont.load_default()
 
-    def render_game_card(self, game_data: Dict, card_width: int = 100) -> Image.Image:
+    def render_game_card(self, game_data: Dict, card_width: int = 192) -> Image.Image:
         """
-        Render a game card with player statistics.
+        Render a game card with player statistics in 3-panel layout.
+
+        Layout: [Panel 1: Game Info with Logos] [Panel 2: Away Stats] [Panel 3: Home Stats]
+        Each panel is 64px wide.
 
         Args:
             game_data: Game dictionary with team info and stat leaders
-            card_width: Width of the card in pixels (default: 100)
+            card_width: Width of the card in pixels (default: 192 for 3 panels)
 
         Returns:
             PIL Image of the game card
         """
-        # Create image
-        img = Image.new('RGB', (card_width, self.display_height), color=COLOR_BLACK)
-        draw = ImageDraw.Draw(img)
-
         try:
             # Extract game info
             away_abbr = game_data.get('away_abbr', 'AWAY')
@@ -83,42 +85,31 @@ class StatsRenderer:
             clock = game_data.get('clock', '')
             away_leaders = game_data.get('away_leaders')
             home_leaders = game_data.get('home_leaders')
+            league = game_data.get('league', 'ncaam')
 
-            # Vertical layout positions
-            y_pos = 1
+            # Panel dimensions
+            panel_width = 64
+            total_width = panel_width * 3  # 3 panels
 
-            # Draw game header (matchup and status)
-            header = f"{away_abbr} {away_score} @ {home_abbr} {home_score}"
-            draw.text((2, y_pos), header, font=self.small_font, fill=COLOR_WHITE)
-            y_pos += 7
+            # Create full image
+            img = Image.new('RGB', (total_width, self.display_height), color=COLOR_BLACK)
+            draw = ImageDraw.Draw(img)
 
-            # Draw game status (period/clock)
-            if period_text:
-                status_text = period_text[:15]  # Truncate if too long
-                draw.text((2, y_pos), status_text, font=self.small_font, fill=COLOR_GRAY)
-                y_pos += 7
+            # --- PANEL 1: Game Info with Logos (Left) ---
+            panel1_x = 0
+            panel1 = self._render_game_info_panel(away_abbr, home_abbr, away_score, home_score,
+                                                  period_text, clock, league)
+            img.paste(panel1, (panel1_x, 0))
 
-            # Draw away team leaders (one line per stat category)
-            if away_leaders:
-                leader_lines = self._format_leaders_detailed(away_abbr, away_leaders)
-                for line in leader_lines:
-                    draw.text((2, y_pos), line, font=self.small_font, fill=COLOR_LIGHT_BLUE)
-                    y_pos += 6
-            else:
-                # No stats available yet
-                draw.text((2, y_pos), f"{away_abbr}: N/A", font=self.small_font, fill=COLOR_GRAY)
-                y_pos += 6
+            # --- PANEL 2: Away Team Stats (Middle) ---
+            panel2_x = panel_width
+            panel2 = self._render_stats_panel(away_abbr, away_leaders, league)
+            img.paste(panel2, (panel2_x, 0))
 
-            # Draw home team leaders (one line per stat category)
-            if home_leaders:
-                leader_lines = self._format_leaders_detailed(home_abbr, home_leaders)
-                for line in leader_lines:
-                    draw.text((2, y_pos), line, font=self.small_font, fill=COLOR_LIGHT_BLUE)
-                    y_pos += 6
-            else:
-                # No stats available yet
-                draw.text((2, y_pos), f"{home_abbr}: N/A", font=self.small_font, fill=COLOR_GRAY)
-                y_pos += 6
+            # --- PANEL 3: Home Team Stats (Right) ---
+            panel3_x = panel_width * 2
+            panel3 = self._render_stats_panel(home_abbr, home_leaders, league)
+            img.paste(panel3, (panel3_x, 0))
 
             return img
 
@@ -126,6 +117,131 @@ class StatsRenderer:
             self.logger.error(f"Error rendering game card: {e}", exc_info=True)
             # Return error card
             return self._create_error_card(card_width)
+
+    def _render_game_info_panel(self, away_abbr: str, home_abbr: str, away_score: int,
+                                home_score: int, period_text: str, clock: str, league: str) -> Image.Image:
+        """
+        Render Panel 1: Game info with team logos (similar to odds-ticker layout).
+
+        Args:
+            away_abbr: Away team abbreviation
+            home_abbr: Home team abbreviation
+            away_score: Away team score
+            home_score: Home team score
+            period_text: Game period/status text
+            clock: Game clock
+            league: League identifier
+
+        Returns:
+            PIL Image of game info panel (64x32)
+        """
+        panel_width = 64
+        panel = Image.new('RGB', (panel_width, self.display_height), color=COLOR_BLACK)
+        draw = ImageDraw.Draw(panel)
+
+        # Get team logos
+        away_logo = self._get_team_logo(league, away_abbr)
+        home_logo = self._get_team_logo(league, home_abbr)
+
+        # Logo size - smaller to fit in 64px
+        logo_size = 22
+        if away_logo:
+            away_logo = away_logo.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
+        if home_logo:
+            home_logo = home_logo.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
+
+        # Layout positions
+        current_x = 2
+        y_center = self.display_height // 2
+
+        # Draw away logo (top half)
+        if away_logo:
+            logo_y = 2
+            panel.paste(away_logo, (current_x, logo_y), away_logo if away_logo.mode == 'RGBA' else None)
+
+        # Draw home logo (bottom half)
+        if home_logo:
+            logo_y = self.display_height - logo_size - 2
+            panel.paste(home_logo, (current_x, logo_y), home_logo if home_logo.mode == 'RGBA' else None)
+
+        current_x += logo_size + 2
+
+        # Draw scores and status on right side
+        # Away score at top
+        score_text = f"{away_score}"
+        draw.text((current_x, 2), score_text, font=self.medium_font, fill=COLOR_WHITE)
+
+        # Home score at bottom
+        score_text = f"{home_score}"
+        draw.text((current_x, self.display_height - 10), score_text, font=self.medium_font, fill=COLOR_WHITE)
+
+        # Period/clock in middle
+        if period_text:
+            status_y = y_center - 4
+            # Truncate to fit
+            status_text = period_text[:8]
+            draw.text((current_x, status_y), status_text, font=self.small_font, fill=COLOR_GRAY)
+
+        return panel
+
+    def _render_stats_panel(self, team_abbr: str, leaders: Optional[Dict], league: str) -> Image.Image:
+        """
+        Render a stats panel showing PTS/REB/AST leaders for one team.
+
+        Args:
+            team_abbr: Team abbreviation
+            leaders: Dictionary of stat leaders
+            league: League identifier
+
+        Returns:
+            PIL Image of stats panel (64x32)
+        """
+        panel_width = 64
+        panel = Image.new('RGB', (panel_width, self.display_height), color=COLOR_BLACK)
+        draw = ImageDraw.Draw(panel)
+
+        # Team logo at top
+        logo = self._get_team_logo(league, team_abbr)
+        if logo:
+            logo_size = 14
+            logo = logo.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
+            logo_x = (panel_width - logo_size) // 2
+            panel.paste(logo, (logo_x, 1), logo if logo.mode == 'RGBA' else None)
+
+        y_pos = 16
+
+        # Draw stat leaders
+        if leaders and ('PTS' in leaders or 'REB' in leaders or 'AST' in leaders):
+            # Points leader
+            if 'PTS' in leaders:
+                pts_leader = leaders['PTS']
+                name = self._abbreviate_display_name(pts_leader.get('name', '?'), max_length=6)
+                value = pts_leader.get('value', 0)
+                text = f"P:{name} {value}"
+                draw.text((2, y_pos), text, font=self.small_font, fill=COLOR_LIGHT_BLUE)
+                y_pos += 6
+
+            # Rebounds leader
+            if 'REB' in leaders:
+                reb_leader = leaders['REB']
+                name = self._abbreviate_display_name(reb_leader.get('name', '?'), max_length=6)
+                value = reb_leader.get('value', 0)
+                text = f"R:{name} {value}"
+                draw.text((2, y_pos), text, font=self.small_font, fill=COLOR_LIGHT_BLUE)
+                y_pos += 6
+
+            # Assists leader
+            if 'AST' in leaders:
+                ast_leader = leaders['AST']
+                name = self._abbreviate_display_name(ast_leader.get('name', '?'), max_length=6)
+                value = ast_leader.get('value', 0)
+                text = f"A:{name} {value}"
+                draw.text((2, y_pos), text, font=self.small_font, fill=COLOR_LIGHT_BLUE)
+        else:
+            # No stats
+            draw.text((2, y_pos), "No stats", font=self.small_font, fill=COLOR_GRAY)
+
+        return panel
 
     def _format_leaders_detailed(self, team_abbr: str, leaders: Dict) -> list:
         """
@@ -305,3 +421,39 @@ class StatsRenderer:
 
         draw.text((x, y), message, font=self.medium_font, fill=COLOR_GRAY)
         return img
+
+    def _get_team_logo(self, league: str, team_abbr: str) -> Optional[Image.Image]:
+        """
+        Get team logo from assets directory.
+
+        Args:
+            league: League identifier ('nba', 'nfl', 'ncaam', 'ncaaf')
+            team_abbr: Team abbreviation
+
+        Returns:
+            PIL Image of team logo, or None if not found
+        """
+        try:
+            # Map league names to logo directories
+            league_logo_map = {
+                'nba': 'nba_logos',
+                'nfl': 'nfl_logos',
+                'ncaam': 'ncaa_mens_logos',
+                'ncaaf': 'ncaa_logos'
+            }
+
+            logo_dir_name = league_logo_map.get(league, '')
+            if not logo_dir_name or not team_abbr:
+                return None
+
+            # Resolve path to logo
+            logo_path = self.project_root / "assets" / "sports" / logo_dir_name / f"{team_abbr}.png"
+            if logo_path.exists():
+                return Image.open(logo_path)
+            else:
+                self.logger.debug(f"Team logo not found: {logo_path}")
+                return None
+
+        except Exception as e:
+            self.logger.error(f"Error loading team logo: {e}")
+            return None
