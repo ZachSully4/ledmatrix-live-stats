@@ -93,30 +93,30 @@ class StatsRenderer:
             home_leaders = game_data.get('home_leaders')
             league = game_data.get('league', 'ncaam')
 
-            # Panel dimensions
-            panel_width = 64
-            total_width = panel_width * 3  # 3 panels
-
-            # Create full image
-            img = Image.new('RGB', (total_width, self.display_height), color=COLOR_BLACK)
-            draw = ImageDraw.Draw(img)
-
-            # --- PANEL 1: Game Info with Logos (Left) ---
-            panel1_x = 0
+            # --- PANEL 1: Game Info with Logos (dynamically sized) ---
             panel1 = self._render_game_info_panel(away_abbr, home_abbr, away_name, home_name,
                                                   away_record, home_record, away_rank, home_rank,
                                                   away_score, home_score, period_text, clock, league)
-            img.paste(panel1, (panel1_x, 0))
 
-            # --- PANEL 2: Away Team Stats (Middle) ---
-            panel2_x = panel_width
+            # --- PANEL 2: Away Team Stats (fixed 64px width) ---
             panel2 = self._render_stats_panel(away_abbr, away_leaders, league)
-            img.paste(panel2, (panel2_x, 0))
 
-            # --- PANEL 3: Home Team Stats (Right) ---
-            panel3_x = panel_width * 2
+            # --- PANEL 3: Home Team Stats (fixed 64px width) ---
             panel3 = self._render_stats_panel(home_abbr, home_leaders, league)
-            img.paste(panel3, (panel3_x, 0))
+
+            # Calculate total width dynamically (panel1 is variable width, panels 2&3 are 64px each)
+            total_width = panel1.width + panel2.width + panel3.width
+
+            # Create full image with dynamic width
+            img = Image.new('RGB', (total_width, self.display_height), color=COLOR_BLACK)
+
+            # Paste panels side by side
+            current_x = 0
+            img.paste(panel1, (current_x, 0))
+            current_x += panel1.width
+            img.paste(panel2, (current_x, 0))
+            current_x += panel2.width
+            img.paste(panel3, (current_x, 0))
 
             return img
 
@@ -177,16 +177,16 @@ class StatsRenderer:
             # Create fallback text logo when image is missing
             self.logger.debug(f"No logo for {home_abbr}, will use text fallback")
 
-        # Format team text with name, record, and ranking
-        # Example: "Boilermakers (15-4, #10)" or "Terrapins (14-5)"
-        def format_team_text(name, record, rank):
+        # Format team text: abbreviation with record and rank
+        # Example: "PUR (15-4,#10)" or "MD (14-5)"
+        def format_team_text(abbr, record, rank):
             # Remove parentheses from record if present
             clean_record = record.strip('()') if record else ''
 
-            # Build text parts
-            parts = [name] if name else []
+            # Start with abbreviation (max 4 chars like odds-ticker)
+            text = abbr[:4] if abbr else ''
 
-            # Add record and rank in parentheses
+            # Add record and rank in parentheses (compact format, no spaces)
             details = []
             if clean_record:
                 details.append(clean_record)
@@ -194,12 +194,12 @@ class StatsRenderer:
                 details.append(f"#{rank}")
 
             if details:
-                parts.append(f"({', '.join(details)})")
+                text += f" ({','.join(details)})"
 
-            return ' '.join(parts) if parts else name or ''
+            return text
 
-        away_team_text = format_team_text(away_name, away_record, away_rank)
-        home_team_text = format_team_text(home_name, home_record, home_rank)
+        away_team_text = format_team_text(away_abbr, away_record, away_rank)
+        home_team_text = format_team_text(home_abbr, home_record, home_rank)
         away_score_text = str(away_score)
         home_score_text = str(home_score)
 
@@ -303,15 +303,8 @@ class StatsRenderer:
         panel = Image.new('RGB', (panel_width, self.display_height), color=COLOR_BLACK)
         draw = ImageDraw.Draw(panel)
 
-        # Team logo at top
-        logo = self._get_team_logo(league, team_abbr)
-        if logo:
-            logo_size = 14
-            logo = logo.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
-            logo_x = (panel_width - logo_size) // 2
-            panel.paste(logo, (logo_x, 1), logo if logo.mode == 'RGBA' else None)
-
-        y_pos = 0
+        # Start drawing stats from top (no logo in stats panel)
+        y_pos = 2
 
         # Draw stat leaders
         if leaders and ('PTS' in leaders or 'REB' in leaders or 'AST' in leaders):
@@ -566,8 +559,9 @@ class StatsRenderer:
                     'OKLA': 'OU', 'OKLAST': 'OKST', 'TCU': 'TCU', 'TXTECH': 'TTU',
                     'IOWA': 'IOWA', 'IOWAST': 'ISU', 'MINN': 'MINN', 'NEB': 'NEB',
                     'MICHST': 'MSU', 'MICH': 'MICH', 'OHIOST': 'OSU', 'PENNST': 'PSU',
-                    'ILL': 'ILL', 'IND': 'IND', 'MD': 'MD', 'NW': 'NW', 'PUR': 'PUR',
-                    'RUTG': 'RUTG', 'WISC': 'WISC',
+                    'ILL': 'ILL', 'IND': 'IND', 'INDIAN': 'IND', 'MD': 'MD', 'MDLAND': 'MD',
+                    'NW': 'NW', 'NRTHW': 'NW', 'PUR': 'PUR', 'PURDUE': 'PUR', 'PURDUW': 'PUR',
+                    'RUTG': 'RUTG', 'RUTGER': 'RUTG', 'WISC': 'WISC', 'WISCON': 'WISC',
                     'DUKE': 'DUKE', 'UNC': 'UNC', 'NCSU': 'NCST', 'WAKE': 'WAKE',
                     'BC': 'BC', 'CLEM': 'CLEM', 'FSU': 'FSU', 'LOU': 'LOU', 'MIAMI': 'MIA',
                     'PITT': 'PITT', 'SYR': 'SYR', 'UVA': 'UVA', 'VT': 'VT',
