@@ -37,26 +37,27 @@ class StatsRenderer:
         self.project_root = Path(__file__).resolve().parent.parent.parent
         self.logger.debug(f"Project root: {self.project_root}")
 
-        # Load fonts (using compact fonts for small display)
+        # Load fonts - EXACT match to odds-ticker
+        # Odds-ticker uses PressStart2P-Regular.ttf at size 8 for all text
         try:
-            # Try to get 4x6 font for compact display
-            self.small_font = ImageFont.load_default()
-            self.medium_font = ImageFont.load_default()
-
-            # Attempt to load better fonts if available
             font_dir = self.project_root / 'assets' / 'fonts'
+            font_path = font_dir / 'PressStart2P-Regular.ttf'
 
-            try:
-                font_path_4x6 = font_dir / '4x6-font.ttf'
-                if font_path_4x6.exists():
-                    self.small_font = ImageFont.truetype(str(font_path_4x6), 6)
-                    self.medium_font = ImageFont.truetype(str(font_path_4x6), 8)
-            except Exception as e:
-                self.logger.debug(f"Could not load custom fonts: {e}")
-                pass
+            if font_path.exists():
+                # Use size 8 for all fonts (matches odds-ticker)
+                self.team_font = ImageFont.truetype(str(font_path), 8)
+                self.small_font = ImageFont.truetype(str(font_path), 8)
+                self.medium_font = ImageFont.truetype(str(font_path), 8)
+                self.logger.debug(f"Loaded PressStart2P font at size 8")
+            else:
+                self.logger.warning(f"Font not found: {font_path}, using default")
+                self.team_font = ImageFont.load_default()
+                self.small_font = ImageFont.load_default()
+                self.medium_font = ImageFont.load_default()
 
         except Exception as e:
             self.logger.warning(f"Error loading fonts, using defaults: {e}")
+            self.team_font = ImageFont.load_default()
             self.small_font = ImageFont.load_default()
             self.medium_font = ImageFont.load_default()
 
@@ -152,12 +153,13 @@ class StatsRenderer:
         height = self.display_height
 
         # EXACT odds-ticker settings
-        logo_size = int(height * 1.2)  # Make logos use most of the display height
+        logo_size = int(height * 1.2)  # Make logos use most of the display height (38px for 32px display)
         h_padding = 4  # Use a consistent horizontal padding
 
-        # Fonts
-        team_font = self.medium_font
-        score_font = self.medium_font
+        # Fonts - EXACT match to odds-ticker (PressStart2P at size 8)
+        team_font = self.team_font
+        score_font = self.team_font
+        vs_font = self.team_font  # Same font for "vs." text
 
         # Get team logos
         away_logo = self._get_team_logo(league, away_abbr)
@@ -218,11 +220,11 @@ class StatsRenderer:
         home_score_width = int(temp_draw.textlength(home_score_text, font=score_font))
         scores_width = max(away_score_width, home_score_width)
 
-        # Period/clock status width
+        # Period/clock status width (use team_font like odds-ticker uses datetime_font at size 8)
         period_display = period_text[:8] if period_text else ""
         clock_display = clock[:8] if clock else ""
-        period_width = int(temp_draw.textlength(period_display, font=self.small_font)) if period_display else 0
-        clock_width = int(temp_draw.textlength(clock_display, font=self.small_font)) if clock_display else 0
+        period_width = int(temp_draw.textlength(period_display, font=team_font)) if period_display else 0
+        clock_width = int(temp_draw.textlength(clock_display, font=team_font)) if clock_display else 0
         status_width = max(period_width, clock_width, 20)  # Min width of 20
 
         # Calculate total width (EXACTLY like odds-ticker formula)
@@ -277,11 +279,11 @@ class StatsRenderer:
         draw.text((current_x, home_y), home_score_text, font=score_font, fill=(255, 255, 255))
         current_x += scores_width + h_padding
 
-        # Period/Clock (stacked - same y positions)
+        # Period/Clock (stacked - same y positions, use team_font like odds-ticker)
         if period_display:
-            draw.text((current_x, away_y), period_display, font=self.small_font, fill=(170, 170, 170))
+            draw.text((current_x, away_y), period_display, font=team_font, fill=(170, 170, 170))
         if clock_display:
-            draw.text((current_x, home_y), clock_display, font=self.small_font, fill=(170, 170, 170))
+            draw.text((current_x, home_y), clock_display, font=team_font, fill=(170, 170, 170))
 
         return image
 
