@@ -325,6 +325,11 @@ class StatsRenderer:
                     for leader in stat_leaders:
                         name = leader.get('name', '?')
                         value = leader.get('value', 0)
+
+                        # Skip players with 0 for this stat
+                        if value == 0:
+                            continue
+
                         # Use last name only for space
                         last_name = name.split()[-1] if ' ' in name else name
                         # Smart truncation: if name is too long, use first initial + last name
@@ -337,8 +342,10 @@ class StatsRenderer:
                         # Pad to 8 chars for alignment
                         player_strs.append(f"{last_name:<8}{value:>2}")
 
-                    stat_str = f"{stat_name}: {', '.join(player_strs)}"
-                    parts.append(stat_str)
+                    # Only add stat category if there are players with > 0
+                    if player_strs:
+                        stat_str = f"{stat_name}: {', '.join(player_strs)}"
+                        parts.append(stat_str)
 
             return "  ".join(parts) if parts else "No stats"
 
