@@ -411,18 +411,19 @@ class StatsRenderer:
                     first_name = parts[0] if len(parts) > 0 else name
                     last_name = parts[-1] if len(parts) > 1 else ''
 
-                    # Draw names
-                    draw.text((player_x, 2), first_name, font=self.small_font, fill=COLOR_WHITE)
-                    draw.text((player_x, 10), last_name, font=self.small_font, fill=COLOR_WHITE)
-
-                    # Draw number after name with padding (not overlapping)
+                    # Draw number first (before name for consistency)
                     number_text = str(value)
-                    name_width = layout['name_width']
-                    number_x = player_x + name_width + 2  # Position after max name width
-                    draw.text((number_x, 3), number_text, font=self.number_font, fill=COLOR_GOLD)
+                    draw.text((player_x, 3), number_text, font=self.number_font, fill=COLOR_GOLD)
+
+                    # Draw names after number with padding
+                    number_width = layout['number_width']
+                    name_x = player_x + number_width + 2
+                    draw.text((name_x, 2), first_name, font=self.small_font, fill=COLOR_WHITE)
+                    draw.text((name_x, 10), last_name, font=self.small_font, fill=COLOR_WHITE)
 
                     # Move to next player
-                    player_x += name_width + layout['number_width'] + 6
+                    name_width = layout['name_width']
+                    player_x += number_width + name_width + 6
 
             # Draw home team players (y=18 first names, y=26 last names)
             if home_leaders and stat_name in home_leaders:
@@ -436,18 +437,19 @@ class StatsRenderer:
                     first_name = parts[0] if len(parts) > 0 else name
                     last_name = parts[-1] if len(parts) > 1 else ''
 
-                    # Draw names
-                    draw.text((player_x, 18), first_name, font=self.small_font, fill=COLOR_WHITE)
-                    draw.text((player_x, 26), last_name, font=self.small_font, fill=COLOR_WHITE)
-
-                    # Draw number after name with padding (not overlapping)
+                    # Draw number first (before name for consistency)
                     number_text = str(value)
-                    name_width = layout['name_width']
-                    number_x = player_x + name_width + 2  # Position after max name width
-                    draw.text((number_x, 19), number_text, font=self.number_font, fill=COLOR_GOLD)
+                    draw.text((player_x, 19), number_text, font=self.number_font, fill=COLOR_GOLD)
+
+                    # Draw names after number with padding
+                    number_width = layout['number_width']
+                    name_x = player_x + number_width + 2
+                    draw.text((name_x, 18), first_name, font=self.small_font, fill=COLOR_WHITE)
+                    draw.text((name_x, 26), last_name, font=self.small_font, fill=COLOR_WHITE)
 
                     # Move to next player
-                    player_x += name_width + layout['number_width'] + 6
+                    name_width = layout['name_width']
+                    player_x += number_width + name_width + 6
 
             # Move to next stat category
             x_pos += stat_width
