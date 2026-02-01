@@ -327,7 +327,7 @@ class StatsRenderer:
 
             Args:
                 leaders: Stat leaders dictionary
-                y_base: Base Y position (0 for away, 16 for home)
+                y_base: Base Y position (2 for away, 18 for home)
                 draw_obj: ImageDraw object
                 calculate_only: If True, only calculate width without drawing
 
@@ -401,18 +401,20 @@ class StatsRenderer:
 
             return x_pos
 
-        # Calculate required width
-        away_width = draw_team_stats(away_leaders, 0, temp_draw, calculate_only=True)
-        home_width = draw_team_stats(home_leaders, 16, temp_draw, calculate_only=True)
+        # Calculate required width with proper vertical padding
+        # Away team: y=2 (first names), y=10 (last names)
+        # Home team: y=18 (first names), y=26 (last names)
+        away_width = draw_team_stats(away_leaders, 2, temp_draw, calculate_only=True)
+        home_width = draw_team_stats(home_leaders, 18, temp_draw, calculate_only=True)
         actual_width = max(away_width, home_width, min_width)
 
         # Create actual panel with calculated width
         panel = Image.new('RGB', (actual_width, height), color=COLOR_BLACK)
         draw = ImageDraw.Draw(panel)
 
-        # Draw both teams
-        draw_team_stats(away_leaders, 0, draw, calculate_only=False)
-        draw_team_stats(home_leaders, 16, draw, calculate_only=False)
+        # Draw both teams with padding
+        draw_team_stats(away_leaders, 2, draw, calculate_only=False)
+        draw_team_stats(home_leaders, 18, draw, calculate_only=False)
 
         return panel
 
