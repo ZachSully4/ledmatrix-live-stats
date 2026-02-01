@@ -591,10 +591,9 @@ class DataFetcher:
         Returns:
             True if at least one team is from a power conference
         """
-        power_conferences = {
-            'Big Ten', 'Big 12', 'SEC', 'Southeastern',
-            'ACC', 'Atlantic Coast', 'Big East',
-            'Pac-12', 'Pacific-12', 'Pac 12'
+        # NCAA API uses conferenceSeo field (conferenceName is often empty)
+        power_conference_slugs = {
+            'big-ten', 'big-12', 'sec', 'acc', 'big-east', 'pac-12'
         }
 
         try:
@@ -604,15 +603,15 @@ class DataFetcher:
             # Check away team conferences
             away_conferences = away.get('conferences', [])
             for conf in away_conferences:
-                conf_name = conf.get('conferenceName', '')
-                if any(pc in conf_name for pc in power_conferences):
+                conf_seo = conf.get('conferenceSeo', '').lower()
+                if conf_seo in power_conference_slugs:
                     return True
 
             # Check home team conferences
             home_conferences = home.get('conferences', [])
             for conf in home_conferences:
-                conf_name = conf.get('conferenceName', '')
-                if any(pc in conf_name for pc in power_conferences):
+                conf_seo = conf.get('conferenceSeo', '').lower()
+                if conf_seo in power_conference_slugs:
                     return True
 
             return False
