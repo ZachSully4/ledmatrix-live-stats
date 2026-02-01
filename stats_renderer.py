@@ -305,7 +305,7 @@ class StatsRenderer:
         panel = Image.new('RGB', (min_width, height), color=COLOR_BLACK)
         draw = ImageDraw.Draw(panel)
 
-        # Helper function to format stat line for one team
+        # Helper function to format stat line for one team with column alignment
         def format_stat_line(leaders):
             if not leaders:
                 return "No stats"
@@ -314,14 +314,16 @@ class StatsRenderer:
             for stat_name in ['PTS', 'REB', 'AST']:
                 if stat_name in leaders:
                     stat_leaders = leaders[stat_name]  # List of top 2
-                    # Format: "PTS: Name1 9, Name2 5"
+                    # Format with fixed-width names for column alignment: "PTS: Name1    9, Name2    5"
                     player_strs = []
                     for leader in stat_leaders:
                         name = leader.get('name', '?')
                         value = leader.get('value', 0)
                         # Use last name only for space
                         last_name = name.split()[-1] if ' ' in name else name
-                        player_strs.append(f"{last_name} {value}")
+                        # Truncate long names and pad to 7 chars for alignment
+                        last_name = last_name[:7]
+                        player_strs.append(f"{last_name:<7}{value:>2}")
 
                     stat_str = f"{stat_name}: {', '.join(player_strs)}"
                     parts.append(stat_str)
@@ -331,12 +333,12 @@ class StatsRenderer:
         # Format away team stats (top half, y=2)
         away_y = 2
         away_text = format_stat_line(away_leaders)
-        draw.text((2, away_y), away_text, font=self.small_font, fill=COLOR_LIGHT_BLUE)
+        draw.text((2, away_y), away_text, font=self.small_font, fill=COLOR_WHITE)
 
         # Format home team stats (bottom half, y=height-10)
         home_y = height - 10
         home_text = format_stat_line(home_leaders)
-        draw.text((2, home_y), home_text, font=self.small_font, fill=COLOR_LIGHT_BLUE)
+        draw.text((2, home_y), home_text, font=self.small_font, fill=COLOR_WHITE)
 
         # Calculate actual width needed based on text
         temp_draw = ImageDraw.Draw(Image.new('RGB', (1, 1)))
@@ -348,8 +350,8 @@ class StatsRenderer:
         if actual_width > min_width:
             panel = Image.new('RGB', (actual_width, height), color=COLOR_BLACK)
             draw = ImageDraw.Draw(panel)
-            draw.text((2, away_y), away_text, font=self.small_font, fill=COLOR_LIGHT_BLUE)
-            draw.text((2, home_y), home_text, font=self.small_font, fill=COLOR_LIGHT_BLUE)
+            draw.text((2, away_y), away_text, font=self.small_font, fill=COLOR_WHITE)
+            draw.text((2, home_y), home_text, font=self.small_font, fill=COLOR_WHITE)
 
         return panel
 
