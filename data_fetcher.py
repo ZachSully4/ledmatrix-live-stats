@@ -115,7 +115,7 @@ class DataFetcher:
                     continue
 
                 # Parse game event
-                game_info = self._parse_game_event(event, league_key)
+                game_info = self._parse_game_event(event, league_key, favorite_teams, favorite_team_expanded_stats)
                 if game_info:
                     live_games.append(game_info)
                     self.logger.info(f"Parsed live game: {game_info.get('away_abbr')} @ {game_info.get('home_abbr')}, "
@@ -129,13 +129,16 @@ class DataFetcher:
             self.logger.error(f"Error fetching live games for {league_key}: {e}", exc_info=True)
             return []
 
-    def _parse_game_event(self, event: Dict, league_key: str) -> Optional[Dict]:
+    def _parse_game_event(self, event: Dict, league_key: str, favorite_teams: List[str] = None,
+                         favorite_team_expanded_stats: bool = True) -> Optional[Dict]:
         """
         Parse a game event and extract relevant information.
 
         Args:
             event: ESPN API event dictionary
             league_key: League identifier for sport-specific parsing
+            favorite_teams: List of favorite team abbreviations
+            favorite_team_expanded_stats: Show expanded stats for favorite team games
 
         Returns:
             Dictionary with game info and stat leaders, or None if parsing fails
@@ -157,16 +160,26 @@ class DataFetcher:
                 return None
 
             # Extract basic game info
+            home_abbr = home_team.get('team', {}).get('abbreviation', 'HOME')
+            away_abbr = away_team.get('team', {}).get('abbreviation', 'AWAY')
+
+            # Check if this is a favorite team game
+            is_favorite = False
+            if favorite_teams:
+                is_favorite = home_abbr.upper() in [t.upper() for t in favorite_teams] or \
+                             away_abbr.upper() in [t.upper() for t in favorite_teams]
+
             game_data = {
                 'id': game_id,
                 'league': league_key,
-                'home_abbr': home_team.get('team', {}).get('abbreviation', 'HOME'),
-                'away_abbr': away_team.get('team', {}).get('abbreviation', 'AWAY'),
+                'home_abbr': home_abbr,
+                'away_abbr': away_abbr,
                 'home_score': int(home_team.get('score', 0)),
                 'away_score': int(away_team.get('score', 0)),
                 'period': status.get('period', 0),
                 'clock': status.get('displayClock', ''),
                 'period_text': status.get('type', {}).get('shortDetail', ''),
+                'is_favorite': is_favorite,
             }
 
             # Fetch detailed boxscore for player stats
@@ -175,8 +188,12 @@ class DataFetcher:
                 if boxscore:
                     # Extract stat leaders from boxscore
                     if league_key in ['nba', 'ncaam']:
-                        game_data['home_leaders'] = self._extract_boxscore_basketball_leaders(boxscore, 'home')
-                        game_data['away_leaders'] = self._extract_boxscore_basketball_leaders(boxscore, 'away')
+                        game_data['home_leaders'] = self._extract_boxscore_basketball_leaders(
+                            boxscore, 'home', expanded_stats=is_favorite and favorite_team_expanded_stats
+                        )
+                        game_data['away_leaders'] = self._extract_boxscore_basketball_leaders(
+                            boxscore, 'away', expanded_stats=is_favorite and favorite_team_expanded_stats
+                        )
                     elif league_key in ['nfl', 'ncaaf']:
                         game_data['home_leaders'] = self._extract_boxscore_football_leaders(boxscore, 'home')
                         game_data['away_leaders'] = self._extract_boxscore_football_leaders(boxscore, 'away')
@@ -229,13 +246,14 @@ class DataFetcher:
             self.logger.debug(f"Error fetching boxscore for game {game_id}: {e}")
             return None
 
-    def _extract_boxscore_basketball_leaders(self, boxscore: Dict, home_away: str) -> Optional[Dict]:
+    def _extract_boxscore_basketball_leaders(self, boxscore: Dict, home_away: str, expanded_stats: bool = False) -> Optional[Dict]:
         """
         Extract basketball leaders from boxscore data.
 
         Args:
             boxscore: Boxscore response from ESPN
             home_away: 'home' or 'away'
+            expanded_stats: If True, include STL and BLK stats
 
         Returns:
             Leaders dict or None
@@ -271,18 +289,20 @@ class DataFetcher:
             if not athletes:
                 return None
 
-            # Extract leaders for PTS, REB, AST
+            # Extract leaders for PTS, REB, AST (and STL, BLK if expanded)
             leaders = {}
             max_pts = {'name': None, 'value': 0}
             max_reb = {'name': None, 'value': 0}
             max_ast = {'name': None, 'value': 0}
+            max_stl = {'name': None, 'value': 0}
+            max_blk = {'name': None, 'value': 0}
 
             for athlete in athletes:
                 # Use displayName (full name) instead of shortName (last name only)
                 name = athlete.get('athlete', {}).get('displayName', athlete.get('athlete', {}).get('shortName', 'Unknown'))
                 stats = athlete.get('stats', [])
 
-                # Stats are usually strings in order, need to find PTS/REB/AST
+                # Stats are usually strings in order, need to find PTS/REB/AST/STL/BLK
                 # Common order: MIN, FG, 3PT, FT, OREB, DREB, REB, AST, STL, BLK, TO, PF, PTS
                 # But this varies, so we need to check the labels
                 if len(stats) >= 13:  # Typical basketball stat line length
@@ -290,6 +310,8 @@ class DataFetcher:
                         pts = int(stats[-1]) if stats[-1] else 0  # PTS usually last
                         reb = int(stats[6]) if len(stats) > 6 and stats[6] else 0  # REB usually index 6
                         ast = int(stats[7]) if len(stats) > 7 and stats[7] else 0  # AST usually index 7
+                        stl = int(stats[8]) if len(stats) > 8 and stats[8] else 0  # STL usually index 8
+                        blk = int(stats[9]) if len(stats) > 9 and stats[9] else 0  # BLK usually index 9
 
                         if pts > max_pts['value']:
                             max_pts = {'name': name, 'value': pts}
@@ -297,6 +319,11 @@ class DataFetcher:
                             max_reb = {'name': name, 'value': reb}
                         if ast > max_ast['value']:
                             max_ast = {'name': name, 'value': ast}
+                        if expanded_stats:
+                            if stl > max_stl['value']:
+                                max_stl = {'name': name, 'value': stl}
+                            if blk > max_blk['value']:
+                                max_blk = {'name': name, 'value': blk}
                     except (ValueError, IndexError):
                         continue
 
@@ -306,6 +333,11 @@ class DataFetcher:
                 leaders['REB'] = max_reb
             if max_ast['name']:
                 leaders['AST'] = max_ast
+            if expanded_stats:
+                if max_stl['name']:
+                    leaders['STL'] = max_stl
+                if max_blk['name']:
+                    leaders['BLK'] = max_blk
 
             return leaders if leaders else None
 
