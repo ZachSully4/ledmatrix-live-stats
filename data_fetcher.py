@@ -286,6 +286,12 @@ class DataFetcher:
             if not stats_group:
                 return None
 
+            # Debug: Log stat labels to understand the order
+            stat_labels = stats_group.get('labels', [])
+            stat_names = stats_group.get('names', [])
+            self.logger.info(f"ESPN boxscore stat labels: {stat_labels}")
+            self.logger.info(f"ESPN boxscore stat names: {stat_names}")
+
             athletes = stats_group.get('athletes', [])
             if not athletes:
                 return None
@@ -302,6 +308,10 @@ class DataFetcher:
                 # Use displayName (full name) instead of shortName (last name only)
                 name = athlete.get('athlete', {}).get('displayName', athlete.get('athlete', {}).get('shortName', 'Unknown'))
                 stats = athlete.get('stats', [])
+
+                # Debug logging for first player to see stat structure
+                if not max_pts['name']:  # Log only for first player
+                    self.logger.info(f"ESPN boxscore stats for {name}: {stats} (length: {len(stats)})")
 
                 # Stats are usually strings in order, need to find PTS/REB/AST/STL/BLK
                 # Common order: MIN, FG, 3PT, FT, OREB, DREB, REB, AST, STL, BLK, TO, PF, PTS
