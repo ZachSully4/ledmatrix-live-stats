@@ -57,6 +57,11 @@
           "minimum": 1,
           "maximum": 100,
           "description": "Maximum number of games to display per league"
+        },
+        "power_conferences_only": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show only power conference games (Big Ten, Big 12, SEC, ACC, Big East, Pac-12)"
         }
       },
       "default": {}

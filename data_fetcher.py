@@ -551,6 +551,12 @@ class DataFetcher:
                 if game_state != 'live':
                     continue
 
+                # Check power conference filter
+                power_conf_only = self.cache_manager.config.get('live-player-stats', {}).get('data_settings', {}).get('power_conferences_only', False)
+                if power_conf_only and not self._is_power_conference_game(game):
+                    self.logger.debug(f"Skipping non-power conference game: {away_name} @ {home_name}")
+                    continue
+
                 # Parse game data
                 game_info = self._parse_ncaa_game(game)
                 if game_info:
@@ -565,6 +571,54 @@ class DataFetcher:
         except Exception as e:
             self.logger.error(f"Error fetching NCAA games: {e}", exc_info=True)
             return []
+
+    def _is_power_conference_game(self, game: Dict) -> bool:
+        """
+        Check if a game involves at least one power conference team.
+
+        Power Conferences:
+        - Big Ten
+        - Big 12
+        - SEC (Southeastern Conference)
+        - ACC (Atlantic Coast Conference)
+        - Big East
+        - Pac-12
+
+        Args:
+            game: NCAA game dictionary
+
+        Returns:
+            True if at least one team is from a power conference
+        """
+        power_conferences = {
+            'Big Ten', 'Big 12', 'SEC', 'Southeastern',
+            'ACC', 'Atlantic Coast', 'Big East',
+            'Pac-12', 'Pacific-12', 'Pac 12'
+        }
+
+        try:
+            away = game.get('away', {})
+            home = game.get('home', {})
+
+            # Check away team conferences
+            away_conferences = away.get('conferences', [])
+            for conf in away_conferences:
+                conf_name = conf.get('conferenceName', '')
+                if any(pc in conf_name for pc in power_conferences):
+                    return True
+
+            # Check home team conferences
+            home_conferences = home.get('conferences', [])
+            for conf in home_conferences:
+                conf_name = conf.get('conferenceName', '')
+                if any(pc in conf_name for pc in power_conferences):
+                    return True
+
+            return False
+
+        except Exception as e:
+            self.logger.debug(f"Error checking power conference: {e}")
+            return False  # If can't determine, don't filter out
 
     def _parse_ncaa_game(self, game: Dict) -> Optional[Dict]:
         """
