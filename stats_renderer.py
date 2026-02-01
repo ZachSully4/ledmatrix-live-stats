@@ -33,9 +33,8 @@ class StatsRenderer:
         self.logger = logger
         self.display_height = display_height
 
-        # Find LEDMatrix root directory
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        self.project_root = Path(os.path.abspath(os.path.join(current_dir, '..', '..', '..')))
+        # EXACT copy from odds-ticker: Resolve project root path (plugin_dir -> plugins -> project_root)
+        self.project_root = Path(__file__).resolve().parent.parent.parent
         self.logger.debug(f"Project root: {self.project_root}")
 
         # Load fonts (using compact fonts for small display)
@@ -470,101 +469,57 @@ class StatsRenderer:
 
     def _get_team_logo(self, league: str, team_abbr: str) -> Optional[Image.Image]:
         """
-        Get team logo from assets directory.
+        Get team logo from assets directory - EXACT copy from odds-ticker + NCAA mapping.
 
         Args:
-            league: League identifier ('nba', 'nfl', 'ncaam', 'ncaaf')
+            league: League identifier
             team_abbr: Team abbreviation
 
         Returns:
             PIL Image of team logo, or None if not found
         """
         try:
+            # Suppress unused parameter warnings (kept for compatibility)
+            _ = None  # team_id placeholder
+            _ = None  # logo_dir placeholder
+
             # Map league names to logo directories
             league_logo_map = {
-                'nba': 'nba_logos',
                 'nfl': 'nfl_logos',
-                'ncaam': 'ncaa_logos',  # College logos are shared for basketball and football
-                'ncaaf': 'ncaa_logos'
+                'mlb': 'mlb_logos',
+                'nba': 'nba_logos',
+                'nhl': 'nhl_logos',
+                'ncaa_fb': 'ncaa_logos',
+                'ncaam': 'ncaa_logos',
+                'ncaaf': 'ncaa_logos',
+                'milb': 'milb_logos'
             }
 
             logo_dir_name = league_logo_map.get(league, '')
             if not logo_dir_name or not team_abbr:
                 return None
 
-            # NCAA team abbreviation mapping (API name → logo filename)
-            # The NCAA API returns full/different abbreviations that don't match logo filenames
-            ncaa_abbr_map = {
-                'KANSAS': 'KU',
-                'BAYLOR': 'BAY',
-                'MIAMI': 'MIA',
-                'MIZZOU': 'MIZ',
-                'MISSOURI': 'MIZ',
-                'TEXASA&M': 'TAMU',
-                'TEXAS A&M': 'TAMU',
-                'SOUTHCAR': 'SC',
-                'SOUTH CAROLINA': 'SC',
-                'OLEMISS': 'MISS',
-                'OLE MISS': 'MISS',
-                'PENNST': 'PSU',
-                'PENN STATE': 'PSU',
-                'PITTSB': 'PITT',
-                'PITTSBURGH': 'PITT',
-                'CALBAP': 'CALST',
-                'STBONA': 'SBU',
-                'STMARY': 'SMC',
-                'STCLAR': 'SCU',
-                'STLOUI': 'SLU',
-                'STPETE': 'SPU',
-                'STFRAN': 'SFU',
-                'LOYCHI': 'LUC',
-                'LOYMAR': 'LMU',
-                'UTAHST': 'USU',
-                'UTAHVA': 'UVU',
-                'KANSST': 'KSU',
-                'OKLA ST': 'OKST',
-                'OKLAHOMA STATE': 'OKST',
-                'OREG ST': 'ORST',
-                'OREGON STATE': 'ORST',
-                'WASH ST': 'WSU',
-                'WASHINGTON STATE': 'WSU',
-                'IOWA ST': 'ISU',
-                'IOWA STATE': 'ISU',
-                'ARIZ ST': 'ASU',
-                'ARIZONA STATE': 'ASU',
-                'MICH ST': 'MSU',
-                'MICHIGAN STATE': 'MSU',
-                'OHIO ST': 'OSU',
-                'OHIO STATE': 'OSU',
-                'FRESST': 'FRES',
-                'SDIEGO': 'USD',
-                'SAN DIEGO': 'USD',
-                'SMISSO': 'SEMO',
-                'UCRIVERSIDE': 'UCR',
-                'UC RIVERSIDE': 'UCR',
-                'UCIRVINE': 'UCI',
-                'UC IRVINE': 'UCI',
-                'UCSANTABARBARA': 'UCSB',
-                'UC SANTA BARBARA': 'UCSB',
-                'UCDAVIS': 'UCD',
-                'UC DAVIS': 'UCD',
-                'UCSAN DIEGO': 'UCSD',
-                'LASALLE': 'LAS',
-                'LA SALLE': 'LAS',
-            }
-
-            # Apply NCAA mapping if this is an NCAA league
+            # NCAA abbreviation mapping (NCAA API → logo filename)
             if league in ['ncaam', 'ncaaf']:
-                team_abbr = ncaa_abbr_map.get(team_abbr.upper(), team_abbr)
+                ncaa_map = {
+                    'KANSAS': 'KU', 'BAYLOR': 'BAY', 'MIAMI': 'MIA', 'MIZZOU': 'MIZ',
+                    'MISSOURI': 'MIZ', 'TEXASA&M': 'TAMU', 'TEXAS A&M': 'TAMU',
+                    'SOUTHCAR': 'SC', 'OLEMISS': 'MISS', 'PENNST': 'PSU',
+                    'PITTSB': 'PITT', 'KANSST': 'KSU', 'UTAHST': 'USU',
+                    'OKST': 'OKST', 'ORST': 'ORST', 'IOWAST': 'ISU',
+                    'ARIZST': 'ASU', 'MICHST': 'MSU', 'OHIOST': 'OSU'
+                }
+                team_abbr = ncaa_map.get(team_abbr, team_abbr)
 
-            # Resolve path to logo
+            # Resolve path relative to project root
             logo_path = self.project_root / "assets" / "sports" / logo_dir_name / f"{team_abbr}.png"
             if logo_path.exists():
+                self.logger.debug(f"Loading logo: {logo_path}")
                 return Image.open(logo_path)
             else:
-                self.logger.debug(f"Team logo not found: {logo_path} (original: {team_abbr})")
+                self.logger.warning(f"Team logo not found: {logo_path}")
                 return None
 
         except Exception as e:
-            self.logger.error(f"Error loading team logo: {e}")
+            self.logger.error(f"Error loading team logo for {team_abbr} in {league}: {e}")
             return None
