@@ -317,7 +317,8 @@ class StatsRenderer:
             stat_names = ['PTS', 'REB', 'AST', 'STL', 'BLK'] if expanded_stats else ['PTS', 'REB', 'AST']
 
             # Fixed width per stat category for alignment (accommodates 2-3 players)
-            stat_width = 32 if not expanded_stats else 26
+            stat_width = 30 if not expanded_stats else 24
+            gap = "  "  # Gap between stat categories
 
             parts = []
             for stat_name in stat_names:
@@ -348,9 +349,10 @@ class StatsRenderer:
                     # Only add stat category if there are players with > 0
                     if player_strs:
                         stat_str = f"{stat_name}: {', '.join(player_strs)}"
-                        # Pad stat category to fixed width for column alignment
-                        parts.append(f"{stat_str:<{stat_width}}")
+                        # Pad stat category to fixed width and add gap
+                        parts.append(f"{stat_str:<{stat_width}}{gap}")
 
+            # Join and remove trailing gap/spaces
             return "".join(parts).rstrip() if parts else "No stats"
 
         # Format away team stats (top half, y=2)
