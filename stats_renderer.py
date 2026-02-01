@@ -45,15 +45,15 @@ class StatsRenderer:
             font_path = font_dir / 'PressStart2P-Regular.ttf'
 
             if font_path.exists():
-                # Use size 7 for text (slightly smaller for better fit)
+                # Use size 6 for player names (prevent descenders from hanging too low)
                 self.team_font = ImageFont.truetype(str(font_path), 8)
-                self.small_font = ImageFont.truetype(str(font_path), 7)
+                self.small_font = ImageFont.truetype(str(font_path), 6)
                 self.medium_font = ImageFont.truetype(str(font_path), 8)
                 # Load larger font for stat labels
                 self.stat_label_font = ImageFont.truetype(str(font_path), 8)
                 # Load larger font for numbers in new layout
                 self.number_font = ImageFont.truetype(str(font_path), 10)
-                self.logger.debug(f"Loaded PressStart2P font at sizes 7, 8, and 10")
+                self.logger.debug(f"Loaded PressStart2P font at sizes 6, 8, and 10")
             else:
                 self.logger.warning(f"Font not found: {font_path}, using default")
                 self.team_font = ImageFont.load_default()
