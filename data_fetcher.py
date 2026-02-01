@@ -351,17 +351,18 @@ class DataFetcher:
                     except (ValueError, IndexError):
                         continue
 
+            # Wrap single leader dicts in lists to match expected format
             if max_pts['name']:
-                leaders['PTS'] = max_pts
+                leaders['PTS'] = [max_pts]
             if max_reb['name']:
-                leaders['REB'] = max_reb
+                leaders['REB'] = [max_reb]
             if max_ast['name']:
-                leaders['AST'] = max_ast
+                leaders['AST'] = [max_ast]
             if expanded_stats:
                 if max_stl['name']:
-                    leaders['STL'] = max_stl
+                    leaders['STL'] = [max_stl]
                 if max_blk['name']:
-                    leaders['BLK'] = max_blk
+                    leaders['BLK'] = [max_blk]
 
             return leaders if leaders else None
 
