@@ -587,6 +587,12 @@ class DataFetcher:
                 'league': 'ncaam',
                 'home_abbr': home.get('names', {}).get('char6', 'HOME'),
                 'away_abbr': away.get('names', {}).get('char6', 'AWAY'),
+                'home_name': home.get('names', {}).get('short', 'HOME'),
+                'away_name': away.get('names', {}).get('short', 'AWAY'),
+                'home_record': home.get('description', ''),
+                'away_record': away.get('description', ''),
+                'home_rank': home.get('rank', ''),
+                'away_rank': away.get('rank', ''),
                 'home_score': int(home.get('score', 0)),
                 'away_score': int(away.get('score', 0)),
                 'period': 0,  # NCAA API uses currentPeriod text

@@ -78,6 +78,12 @@ class StatsRenderer:
             # Extract game info
             away_abbr = game_data.get('away_abbr', 'AWAY')
             home_abbr = game_data.get('home_abbr', 'HOME')
+            away_name = game_data.get('away_name', away_abbr)
+            home_name = game_data.get('home_name', home_abbr)
+            away_record = game_data.get('away_record', '')
+            home_record = game_data.get('home_record', '')
+            away_rank = game_data.get('away_rank', '')
+            home_rank = game_data.get('home_rank', '')
             away_score = game_data.get('away_score', 0)
             home_score = game_data.get('home_score', 0)
             period_text = game_data.get('period_text', '')
@@ -96,8 +102,9 @@ class StatsRenderer:
 
             # --- PANEL 1: Game Info with Logos (Left) ---
             panel1_x = 0
-            panel1 = self._render_game_info_panel(away_abbr, home_abbr, away_score, home_score,
-                                                  period_text, clock, league)
+            panel1 = self._render_game_info_panel(away_abbr, home_abbr, away_name, home_name,
+                                                  away_record, home_record, away_rank, home_rank,
+                                                  away_score, home_score, period_text, clock, league)
             img.paste(panel1, (panel1_x, 0))
 
             # --- PANEL 2: Away Team Stats (Middle) ---
@@ -117,14 +124,22 @@ class StatsRenderer:
             # Return error card
             return self._create_error_card(card_width)
 
-    def _render_game_info_panel(self, away_abbr: str, home_abbr: str, away_score: int,
-                                home_score: int, period_text: str, clock: str, league: str) -> Image.Image:
+    def _render_game_info_panel(self, away_abbr: str, home_abbr: str, away_name: str, home_name: str,
+                                away_record: str, home_record: str, away_rank: str, home_rank: str,
+                                away_score: int, home_score: int, period_text: str, clock: str,
+                                league: str) -> Image.Image:
         """
-        Render Panel 1: Game info with team logos (EXACTLY copied from odds-ticker).
+        Render Panel 1: Game info with team logos matching odds-ticker format.
 
         Args:
-            away_abbr: Away team abbreviation
-            home_abbr: Home team abbreviation
+            away_abbr: Away team abbreviation (for logo lookup)
+            home_abbr: Home team abbreviation (for logo lookup)
+            away_name: Away team name (e.g., "Boilermakers")
+            home_name: Home team name (e.g., "Terrapins")
+            away_record: Away team record (e.g., "(15-4)")
+            home_record: Home team record (e.g., "(14-5)")
+            away_rank: Away team ranking (e.g., "10" or "")
+            home_rank: Home team ranking (e.g., "15" or "")
             away_score: Away team score
             home_score: Home team score
             period_text: Game period/status text
@@ -150,12 +165,39 @@ class StatsRenderer:
 
         if away_logo:
             away_logo = away_logo.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
+        else:
+            # Create fallback text logo when image is missing
+            self.logger.debug(f"No logo for {away_abbr}, will use text fallback")
+
         if home_logo:
             home_logo = home_logo.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
+        else:
+            # Create fallback text logo when image is missing
+            self.logger.debug(f"No logo for {home_abbr}, will use text fallback")
 
-        # Format team names and scores (truncate team names to 4 chars like odds-ticker)
-        away_team_text = away_abbr[:4]
-        home_team_text = home_abbr[:4]
+        # Format team text with name, record, and ranking
+        # Example: "Boilermakers (15-4, #10)" or "Terrapins (14-5)"
+        def format_team_text(name, record, rank):
+            # Remove parentheses from record if present
+            clean_record = record.strip('()') if record else ''
+
+            # Build text parts
+            parts = [name] if name else []
+
+            # Add record and rank in parentheses
+            details = []
+            if clean_record:
+                details.append(clean_record)
+            if rank:
+                details.append(f"#{rank}")
+
+            if details:
+                parts.append(f"({', '.join(details)})")
+
+            return ' '.join(parts) if parts else name or ''
+
+        away_team_text = format_team_text(away_name, away_record, away_rank)
+        home_team_text = format_team_text(home_name, home_record, home_rank)
         away_score_text = str(away_score)
         home_score_text = str(home_score)
 
@@ -193,20 +235,34 @@ class StatsRenderer:
         # --- Draw elements (EXACTLY like odds-ticker) ---
         current_x = 0
 
-        # Away Logo (centered vertically)
+        # Away Logo (centered vertically) or fallback text
         if away_logo:
             y_pos = (height - logo_size) // 2  # Center the logo vertically
             image.paste(away_logo, (current_x, y_pos), away_logo if away_logo.mode == 'RGBA' else None)
+        else:
+            # Draw team abbreviation as fallback
+            abbr_text = away_abbr[:4]
+            text_width = int(temp_draw.textlength(abbr_text, font=team_font))
+            text_x = current_x + (logo_size - text_width) // 2
+            text_y = (height - team_font.size) // 2 if hasattr(team_font, 'size') else height // 2 - 4
+            draw.text((text_x, text_y), abbr_text, font=team_font, fill=(150, 150, 150))
         current_x += logo_size + h_padding
 
         # "vs." text (centered vertically)
         draw.text((current_x, height // 2 - 4), vs_text, font=team_font, fill=(255, 255, 255))
         current_x += vs_width + h_padding
 
-        # Home Logo (centered vertically)
+        # Home Logo (centered vertically) or fallback text
         if home_logo:
             y_pos = (height - logo_size) // 2  # Center the logo vertically
             image.paste(home_logo, (current_x, y_pos), home_logo if home_logo.mode == 'RGBA' else None)
+        else:
+            # Draw team abbreviation as fallback
+            abbr_text = home_abbr[:4]
+            text_width = int(temp_draw.textlength(abbr_text, font=team_font))
+            text_x = current_x + (logo_size - text_width) // 2
+            text_y = (height - team_font.size) // 2 if hasattr(team_font, 'size') else height // 2 - 4
+            draw.text((text_x, text_y), abbr_text, font=team_font, fill=(150, 150, 150))
         current_x += logo_size + h_padding
 
         # Team names (stacked - EXACTLY like odds-ticker)
