@@ -270,9 +270,12 @@ class DataFetcher:
 
             # Find the team (home is usually index 1, away is 0, but check homeAway field)
             team_data = None
-            for team in players_section:
+            self.logger.info(f"DEBUG: Looking for team with homeAway='{home_away}'")
+            for idx, team in enumerate(players_section):
                 team_info = team.get('team', {})
-                if team_info.get('homeAway') == home_away:
+                team_home_away = team_info.get('homeAway')
+                self.logger.info(f"DEBUG: Team {idx}: homeAway='{team_home_away}', all team keys: {list(team_info.keys())}")
+                if team_home_away == home_away:
                     team_data = team
                     break
 
