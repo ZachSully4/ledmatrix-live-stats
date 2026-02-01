@@ -369,11 +369,16 @@ class StatsRenderer:
                 'number_width': max_number_width
             }
 
-        # Calculate total width
+        # Calculate total width (including 8px gaps between categories)
         total_width = 4  # Starting padding
+        num_stats = 0
         for stat_name in stat_names:
             if stat_name in stat_layouts:
                 total_width += stat_layouts[stat_name]['width']
+                num_stats += 1
+        # Add gaps between stat categories (8px between each pair)
+        if num_stats > 1:
+            total_width += (num_stats - 1) * 8
         total_width = max(total_width, min_width)
 
         # Create panel
