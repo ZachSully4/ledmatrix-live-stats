@@ -709,19 +709,22 @@ class DataFetcher:
             pts_sorted = sorted(pts_list, key=lambda x: x['value'], reverse=True)
             if pts_sorted and pts_sorted[0]['value'] > 0:
                 leaders['PTS'] = pts_sorted[:2]  # Top 2
-                self.logger.debug(f"PTS leaders: {[f\"{p['name']} {p['value']}\" for p in leaders['PTS']]}")
+                pts_str = ', '.join([f"{p['name']} {p['value']}" for p in leaders['PTS']])
+                self.logger.debug(f"PTS leaders: {pts_str}")
 
             # Top 2 REB leaders
             reb_sorted = sorted(reb_list, key=lambda x: x['value'], reverse=True)
             if reb_sorted and reb_sorted[0]['value'] > 0:
                 leaders['REB'] = reb_sorted[:2]  # Top 2
-                self.logger.debug(f"REB leaders: {[f\"{p['name']} {p['value']}\" for p in leaders['REB']]}")
+                reb_str = ', '.join([f"{p['name']} {p['value']}" for p in leaders['REB']])
+                self.logger.debug(f"REB leaders: {reb_str}")
 
             # Top 2 AST leaders
             ast_sorted = sorted(ast_list, key=lambda x: x['value'], reverse=True)
             if ast_sorted and ast_sorted[0]['value'] > 0:
                 leaders['AST'] = ast_sorted[:2]  # Top 2
-                self.logger.debug(f"AST leaders: {[f\"{p['name']} {p['value']}\" for p in leaders['AST']]}")
+                ast_str = ', '.join([f"{p['name']} {p['value']}" for p in leaders['AST']])
+                self.logger.debug(f"AST leaders: {ast_str}")
 
             return leaders if leaders else None
 
