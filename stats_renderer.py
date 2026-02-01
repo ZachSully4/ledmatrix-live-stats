@@ -121,7 +121,7 @@ class StatsRenderer:
     def _render_game_info_panel(self, away_abbr: str, home_abbr: str, away_score: int,
                                 home_score: int, period_text: str, clock: str, league: str) -> Image.Image:
         """
-        Render Panel 1: Game info with team logos (similar to odds-ticker layout).
+        Render Panel 1: Game info with team logos (EXACTLY matching odds-ticker layout).
 
         Args:
             away_abbr: Away team abbreviation
@@ -136,8 +136,11 @@ class StatsRenderer:
             PIL Image of game info panel (64x32)
         """
         panel_width = 64
-        panel = Image.new('RGB', (panel_width, self.display_height), color=COLOR_BLACK)
-        draw = ImageDraw.Draw(panel)
+        height = self.display_height
+
+        # Logo size matching odds-ticker: 120% of height
+        logo_size = int(height * 1.2)
+        h_padding = 4  # Horizontal padding between elements
 
         # Get team logos
         self.logger.debug(f"Loading logos for {away_abbr} @ {home_abbr} (league: {league})")
@@ -145,57 +148,58 @@ class StatsRenderer:
         home_logo = self._get_team_logo(league, home_abbr)
 
         if away_logo:
+            away_logo = away_logo.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
             self.logger.debug(f"Away logo loaded for {away_abbr}")
         else:
             self.logger.warning(f"Away logo NOT found for {away_abbr}")
 
         if home_logo:
+            home_logo = home_logo.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
             self.logger.debug(f"Home logo loaded for {home_abbr}")
         else:
             self.logger.warning(f"Home logo NOT found for {home_abbr}")
 
-        # Logo size - smaller to fit in 64px
-        logo_size = 20
-        if away_logo:
-            away_logo = away_logo.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
-        if home_logo:
-            home_logo = home_logo.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
+        # Calculate text widths for layout
+        temp_draw = ImageDraw.Draw(Image.new('RGB', (1, 1)))
+        away_score_text = str(away_score)
+        home_score_text = str(home_score)
+        away_score_width = int(temp_draw.textlength(away_score_text, font=self.medium_font))
+        home_score_width = int(temp_draw.textlength(home_score_text, font=self.medium_font))
+        scores_width = max(away_score_width, home_score_width)
 
-        # Layout positions
-        current_x = 2
+        # Calculate total width needed
+        total_width = logo_size + h_padding + scores_width + h_padding + logo_size
 
-        # --- TOP HALF: Away Team ---
-        # Logo or team abbr
+        # Create panel image
+        panel = Image.new('RGB', (int(total_width), height), color=COLOR_BLACK)
+        draw = ImageDraw.Draw(panel)
+
+        # --- Draw elements (matching odds-ticker exactly) ---
+        current_x = 0
+
+        # Away Logo (centered vertically)
         if away_logo:
-            logo_y = 2
-            panel.paste(away_logo, (current_x, logo_y), away_logo if away_logo.mode == 'RGBA' else None)
+            y_pos = (height - logo_size) // 2
+            panel.paste(away_logo, (current_x, y_pos), away_logo if away_logo.mode == 'RGBA' else None)
         else:
-            # Draw team abbr if no logo
+            # Fallback: draw team abbr
             draw.text((current_x, 2), away_abbr[:4], font=self.small_font, fill=COLOR_WHITE)
+        current_x += logo_size + h_padding
 
-        # Away score
-        score_x = current_x + logo_size + 2
-        draw.text((score_x, 2), str(away_score), font=self.medium_font, fill=COLOR_WHITE)
+        # Scores (stacked - away on top, home on bottom)
+        away_y = 2
+        home_y = height - 10
+        draw.text((current_x, away_y), away_score_text, font=self.medium_font, fill=COLOR_WHITE)
+        draw.text((current_x, home_y), home_score_text, font=self.medium_font, fill=COLOR_WHITE)
+        current_x += scores_width + h_padding
 
-        # --- BOTTOM HALF: Home Team ---
-        # Logo or team abbr
+        # Home Logo (centered vertically)
         if home_logo:
-            logo_y = self.display_height - logo_size - 2
-            panel.paste(home_logo, (current_x, logo_y), home_logo if home_logo.mode == 'RGBA' else None)
+            y_pos = (height - logo_size) // 2
+            panel.paste(home_logo, (current_x, y_pos), home_logo if home_logo.mode == 'RGBA' else None)
         else:
-            # Draw team abbr if no logo
-            draw.text((current_x, self.display_height - 8), home_abbr[:4], font=self.small_font, fill=COLOR_WHITE)
-
-        # Home score
-        draw.text((score_x, self.display_height - 10), str(home_score), font=self.medium_font, fill=COLOR_WHITE)
-
-        # --- MIDDLE: Period/Clock ---
-        if period_text:
-            # Truncate to fit
-            status_text = period_text[:8]
-            # Center it
-            y_center = self.display_height // 2
-            draw.text((current_x, y_center - 3), status_text, font=self.small_font, fill=COLOR_GRAY)
+            # Fallback: draw team abbr
+            draw.text((current_x, height - 8), home_abbr[:4], font=self.small_font, fill=COLOR_WHITE)
 
         return panel
 
