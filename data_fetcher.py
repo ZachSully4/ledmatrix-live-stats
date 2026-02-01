@@ -44,13 +44,14 @@ class DataFetcher:
         self.cache_manager = cache_manager
         self.logger = logger
 
-    def fetch_live_games(self, league_key: str, max_games: int = 50) -> List[Dict]:
+    def fetch_live_games(self, league_key: str, max_games: int = 50, power_conferences_only: bool = False) -> List[Dict]:
         """
         Fetch live games for a specific league.
 
         Args:
             league_key: League identifier ('nba', 'nfl', 'ncaam', 'ncaaf')
             max_games: Maximum number of games to return
+            power_conferences_only: Filter to only power conference games (NCAA only)
 
         Returns:
             List of game dictionaries with extracted stats
@@ -61,7 +62,7 @@ class DataFetcher:
 
         # Use NCAA API for college basketball (better player stats)
         if league_key == 'ncaam':
-            return self._fetch_ncaa_basketball_games(max_games)
+            return self._fetch_ncaa_basketball_games(max_games, power_conferences_only)
 
         sport, league = LEAGUE_MAP[league_key]
 
@@ -496,12 +497,13 @@ class DataFetcher:
         # Single name or unknown - truncate if too long
         return full_name[:10] if len(full_name) > 10 else full_name
 
-    def _fetch_ncaa_basketball_games(self, max_games: int = 50) -> List[Dict]:
+    def _fetch_ncaa_basketball_games(self, max_games: int = 50, power_conferences_only: bool = False) -> List[Dict]:
         """
         Fetch live NCAA Men's Basketball games using NCAA API.
 
         Args:
             max_games: Maximum number of games to return
+            power_conferences_only: Filter to only power conference games
 
         Returns:
             List of game dictionaries with extracted stats
@@ -552,8 +554,7 @@ class DataFetcher:
                     continue
 
                 # Check power conference filter
-                power_conf_only = self.cache_manager.config.get('live-player-stats', {}).get('data_settings', {}).get('power_conferences_only', False)
-                if power_conf_only and not self._is_power_conference_game(game):
+                if power_conferences_only and not self._is_power_conference_game(game):
                     self.logger.debug(f"Skipping non-power conference game: {away_name} @ {home_name}")
                     continue
 

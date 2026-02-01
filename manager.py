@@ -125,10 +125,11 @@ class LivePlayerStatsPlugin(BasePlugin):
         # Get max games setting
         data_settings = self.config.get('data_settings', {})
         max_games = data_settings.get('max_games_per_league', 50)
+        power_conferences_only = data_settings.get('power_conferences_only', False)
 
         # Try current league
         current = self.league_rotation_order[self.current_league_index]
-        live_games = self.data_fetcher.fetch_live_games(current['key'], max_games=max_games)
+        live_games = self.data_fetcher.fetch_live_games(current['key'], max_games=max_games, power_conferences_only=power_conferences_only)
 
         if not live_games:
             # Rotate to next league
@@ -138,7 +139,7 @@ class LivePlayerStatsPlugin(BasePlugin):
             while attempts < len(self.league_rotation_order):
                 self.current_league_index = (self.current_league_index + 1) % len(self.league_rotation_order)
                 next_league = self.league_rotation_order[self.current_league_index]
-                live_games = self.data_fetcher.fetch_live_games(next_league['key'], max_games=max_games)
+                live_games = self.data_fetcher.fetch_live_games(next_league['key'], max_games=max_games, power_conferences_only=power_conferences_only)
 
                 if live_games:
                     self.logger.info(f"Rotated from {current['key']} to {next_league['key']} ({len(live_games)} live games)")
