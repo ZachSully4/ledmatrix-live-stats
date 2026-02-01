@@ -98,14 +98,11 @@ class StatsRenderer:
                                                   away_record, home_record, away_rank, home_rank,
                                                   away_score, home_score, period_text, clock, league)
 
-            # --- PANEL 2: Away Team Stats (fixed 64px width) ---
-            panel2 = self._render_stats_panel(away_abbr, away_leaders, league)
+            # --- PANEL 2: Combined Stats (stacked top/bottom, dynamically sized) ---
+            panel2 = self._render_combined_stats_panel(away_leaders, home_leaders, league)
 
-            # --- PANEL 3: Home Team Stats (fixed 64px width) ---
-            panel3 = self._render_stats_panel(home_abbr, home_leaders, league)
-
-            # Calculate total width dynamically (panel1 is variable width, panels 2&3 are 64px each)
-            total_width = panel1.width + panel2.width + panel3.width
+            # Calculate total width dynamically
+            total_width = panel1.width + panel2.width
 
             # Create full image with dynamic width
             img = Image.new('RGB', (total_width, self.display_height), color=COLOR_BLACK)
@@ -115,8 +112,6 @@ class StatsRenderer:
             img.paste(panel1, (current_x, 0))
             current_x += panel1.width
             img.paste(panel2, (current_x, 0))
-            current_x += panel2.width
-            img.paste(panel3, (current_x, 0))
 
             return img
 
@@ -286,6 +281,77 @@ class StatsRenderer:
             draw.text((current_x, home_y), clock_display, font=team_font, fill=(170, 170, 170))
 
         return image
+
+    def _render_combined_stats_panel(self, away_leaders: Optional[Dict], home_leaders: Optional[Dict], league: str) -> Image.Image:
+        """
+        Render combined stats panel with both teams stacked (top/bottom).
+
+        Format per team: "PTS: Name1 9, Name2 5  REB: Name3 6, Name4 4  AST: Name5 6, Name6 4"
+
+        Args:
+            away_leaders: Dictionary of away team stat leaders (top 2 each)
+            home_leaders: Dictionary of home team stat leaders (top 2 each)
+            league: League identifier
+
+        Returns:
+            PIL Image of combined stats panel
+        """
+        # Calculate width needed for stats text
+        # Format: "PTS: LastName 9, LastName 5  REB: LastName 6, LastName 4  AST: LastName 6, LastName 4"
+        # Estimate: ~120px minimum width for typical stats
+        min_width = 200
+        height = self.display_height
+
+        panel = Image.new('RGB', (min_width, height), color=COLOR_BLACK)
+        draw = ImageDraw.Draw(panel)
+
+        # Helper function to format stat line for one team
+        def format_stat_line(leaders):
+            if not leaders:
+                return "No stats"
+
+            parts = []
+            for stat_name in ['PTS', 'REB', 'AST']:
+                if stat_name in leaders:
+                    stat_leaders = leaders[stat_name]  # List of top 2
+                    # Format: "PTS: Name1 9, Name2 5"
+                    player_strs = []
+                    for leader in stat_leaders:
+                        name = leader.get('name', '?')
+                        value = leader.get('value', 0)
+                        # Use last name only for space
+                        last_name = name.split()[-1] if ' ' in name else name
+                        player_strs.append(f"{last_name} {value}")
+
+                    stat_str = f"{stat_name}: {', '.join(player_strs)}"
+                    parts.append(stat_str)
+
+            return "  ".join(parts) if parts else "No stats"
+
+        # Format away team stats (top half, y=2)
+        away_y = 2
+        away_text = format_stat_line(away_leaders)
+        draw.text((2, away_y), away_text, font=self.small_font, fill=COLOR_LIGHT_BLUE)
+
+        # Format home team stats (bottom half, y=height-10)
+        home_y = height - 10
+        home_text = format_stat_line(home_leaders)
+        draw.text((2, home_y), home_text, font=self.small_font, fill=COLOR_LIGHT_BLUE)
+
+        # Calculate actual width needed based on text
+        temp_draw = ImageDraw.Draw(Image.new('RGB', (1, 1)))
+        away_width = int(temp_draw.textlength(away_text, font=self.small_font)) + 4
+        home_width = int(temp_draw.textlength(home_text, font=self.small_font)) + 4
+        actual_width = max(away_width, home_width, min_width)
+
+        # If we need more width, recreate the panel
+        if actual_width > min_width:
+            panel = Image.new('RGB', (actual_width, height), color=COLOR_BLACK)
+            draw = ImageDraw.Draw(panel)
+            draw.text((2, away_y), away_text, font=self.small_font, fill=COLOR_LIGHT_BLUE)
+            draw.text((2, home_y), home_text, font=self.small_font, fill=COLOR_LIGHT_BLUE)
+
+        return panel
 
     def _render_stats_panel(self, team_abbr: str, leaders: Optional[Dict], league: str) -> Image.Image:
         """

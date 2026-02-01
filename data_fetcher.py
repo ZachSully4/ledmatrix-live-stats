@@ -678,11 +678,10 @@ class DataFetcher:
             if not player_stats:
                 return None
 
-            # Find leaders for PTS, REB, AST
-            leaders = {}
-            max_pts = {'name': None, 'value': 0}
-            max_reb = {'name': None, 'value': 0}
-            max_ast = {'name': None, 'value': 0}
+            # Find top 2 leaders for PTS, REB, AST
+            pts_list = []
+            reb_list = []
+            ast_list = []
 
             for player in player_stats:
                 first_name = player.get('firstName', '')
@@ -695,26 +694,34 @@ class DataFetcher:
                     reb = int(player.get('totalRebounds', 0) or 0)
                     ast = int(player.get('assists', 0) or 0)
 
-                    if pts > max_pts['value']:
-                        max_pts = {'name': self._abbreviate_name(full_name), 'value': pts}
-                    if reb > max_reb['value']:
-                        max_reb = {'name': self._abbreviate_name(full_name), 'value': reb}
-                    if ast > max_ast['value']:
-                        max_ast = {'name': self._abbreviate_name(full_name), 'value': ast}
+                    pts_list.append({'name': self._abbreviate_name(full_name), 'value': pts})
+                    reb_list.append({'name': self._abbreviate_name(full_name), 'value': reb})
+                    ast_list.append({'name': self._abbreviate_name(full_name), 'value': ast})
 
                 except (ValueError, TypeError) as e:
                     self.logger.debug(f"Error parsing stats for {full_name}: {e}")
                     continue
 
-            if max_pts['name']:
-                leaders['PTS'] = max_pts
-                self.logger.debug(f"PTS leader: {max_pts['name']} - {max_pts['value']}")
-            if max_reb['name']:
-                leaders['REB'] = max_reb
-                self.logger.debug(f"REB leader: {max_reb['name']} - {max_reb['value']}")
-            if max_ast['name']:
-                leaders['AST'] = max_ast
-                self.logger.debug(f"AST leader: {max_ast['name']} - {max_ast['value']}")
+            # Sort and get top 2 for each stat
+            leaders = {}
+
+            # Top 2 PTS leaders
+            pts_sorted = sorted(pts_list, key=lambda x: x['value'], reverse=True)
+            if pts_sorted and pts_sorted[0]['value'] > 0:
+                leaders['PTS'] = pts_sorted[:2]  # Top 2
+                self.logger.debug(f"PTS leaders: {[f\"{p['name']} {p['value']}\" for p in leaders['PTS']]}")
+
+            # Top 2 REB leaders
+            reb_sorted = sorted(reb_list, key=lambda x: x['value'], reverse=True)
+            if reb_sorted and reb_sorted[0]['value'] > 0:
+                leaders['REB'] = reb_sorted[:2]  # Top 2
+                self.logger.debug(f"REB leaders: {[f\"{p['name']} {p['value']}\" for p in leaders['REB']]}")
+
+            # Top 2 AST leaders
+            ast_sorted = sorted(ast_list, key=lambda x: x['value'], reverse=True)
+            if ast_sorted and ast_sorted[0]['value'] > 0:
+                leaders['AST'] = ast_sorted[:2]  # Top 2
+                self.logger.debug(f"AST leaders: {[f\"{p['name']} {p['value']}\" for p in leaders['AST']]}")
 
             return leaders if leaders else None
 
