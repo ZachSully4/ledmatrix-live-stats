@@ -499,15 +499,34 @@ class StatsRenderer:
             if not logo_dir_name or not team_abbr:
                 return None
 
-            # NCAA abbreviation mapping (NCAA API → logo filename)
+            # NCAA abbreviation mapping (NCAA API char6 → logo filename)
+            # The NCAA API returns 6-char codes but logos use short codes
             if league in ['ncaam', 'ncaaf']:
                 ncaa_map = {
-                    'KANSAS': 'KU', 'BAYLOR': 'BAY', 'MIAMI': 'MIA', 'MIZZOU': 'MIZ',
-                    'MISSOURI': 'MIZ', 'TEXASA&M': 'TAMU', 'TEXAS A&M': 'TAMU',
-                    'SOUTHCAR': 'SC', 'OLEMISS': 'MISS', 'PENNST': 'PSU',
-                    'PITTSB': 'PITT', 'KANSST': 'KSU', 'UTAHST': 'USU',
-                    'OKST': 'OKST', 'ORST': 'ORST', 'IOWAST': 'ISU',
-                    'ARIZST': 'ASU', 'MICHST': 'MSU', 'OHIOST': 'OSU'
+                    # Power 5 + Major Programs
+                    'KANSAS': 'KU', 'KANSST': 'KSU', 'BAYLOR': 'BAY', 'TEXAST': 'TEX',
+                    'OKLA': 'OU', 'OKLAST': 'OKST', 'TCU': 'TCU', 'TXTECH': 'TTU',
+                    'IOWA': 'IOWA', 'IOWAST': 'ISU', 'MINN': 'MINN', 'NEB': 'NEB',
+                    'MICHST': 'MSU', 'MICH': 'MICH', 'OHIOST': 'OSU', 'PENNST': 'PSU',
+                    'ILL': 'ILL', 'IND': 'IND', 'MD': 'MD', 'NW': 'NW', 'PUR': 'PUR',
+                    'RUTG': 'RUTG', 'WISC': 'WISC',
+                    'DUKE': 'DUKE', 'UNC': 'UNC', 'NCSU': 'NCST', 'WAKE': 'WAKE',
+                    'BC': 'BC', 'CLEM': 'CLEM', 'FSU': 'FSU', 'LOU': 'LOU', 'MIAMI': 'MIA',
+                    'PITT': 'PITT', 'SYR': 'SYR', 'UVA': 'UVA', 'VT': 'VT',
+                    'ALA': 'ALA', 'ARK': 'ARK', 'AUB': 'AUB', 'FLA': 'FLA', 'UGA': 'UGA',
+                    'KENTKY': 'UK', 'LSU': 'LSU', 'MISS': 'MISS', 'MISST': 'MSST',
+                    'MIZZOU': 'MIZ', 'SC': 'SC', 'TENN': 'TENN', 'TEXAM': 'TAMU',
+                    'VAND': 'VAND', 'OLEMISS': 'MISS',
+                    'ARIZ': 'ARIZ', 'ARIZST': 'ASU', 'CAL': 'CAL', 'COLO': 'COLO',
+                    'OREG': 'ORE', 'ORST': 'ORST', 'STAN': 'STAN', 'UCLA': 'UCLA',
+                    'USC': 'USC', 'UTAH': 'UTAH', 'WASH': 'WASH', 'WSU': 'WSU',
+                    # Other Major Schools
+                    'GTOWN': 'GTWN', 'NOVA': 'VILL', 'SETON': 'SHU', 'PROV': 'PROV',
+                    'MARQ': 'MARQ', 'XAVIE': 'XAV', 'BUTLER': 'BUT', 'CREIGH': 'CRE',
+                    'STJOHN': 'SJU', 'DEPAUL': 'DEP',
+                    'GONZ': 'GONZ', 'STMARY': 'SMC', 'BYU': 'BYU', 'BOISE': 'BOIS',
+                    'SMU': 'SMU', 'HOU': 'HOU', 'CINC': 'CIN', 'UCF': 'UCF', 'TEMPLE': 'TEM',
+                    'SDIEGO': 'USD', 'DAME': 'ND', 'BOST': 'BC'
                 }
                 team_abbr = ncaa_map.get(team_abbr, team_abbr)
 
