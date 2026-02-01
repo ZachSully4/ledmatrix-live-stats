@@ -180,6 +180,7 @@ class DataFetcher:
                 'clock': status.get('displayClock', ''),
                 'period_text': status.get('type', {}).get('shortDetail', ''),
                 'is_favorite': is_favorite,
+                'expanded_stats': is_favorite and favorite_team_expanded_stats,
             }
 
             # Fetch detailed boxscore for player stats
