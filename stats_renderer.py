@@ -121,7 +121,7 @@ class StatsRenderer:
     def _render_game_info_panel(self, away_abbr: str, home_abbr: str, away_score: int,
                                 home_score: int, period_text: str, clock: str, league: str) -> Image.Image:
         """
-        Render Panel 1: Game info with team logos (EXACTLY matching odds-ticker layout).
+        Render Panel 1: Game info with team logos (EXACTLY copied from odds-ticker).
 
         Args:
             away_abbr: Away team abbreviation
@@ -133,75 +133,102 @@ class StatsRenderer:
             league: League identifier
 
         Returns:
-            PIL Image of game info panel (64x32)
+            PIL Image of game info panel matching odds-ticker layout
         """
-        panel_width = 64
         height = self.display_height
 
-        # Logo size matching odds-ticker: 120% of height
-        logo_size = int(height * 1.2)
-        h_padding = 4  # Horizontal padding between elements
+        # EXACT odds-ticker settings
+        logo_size = int(height * 1.2)  # Make logos use most of the display height
+        h_padding = 4  # Use a consistent horizontal padding
+
+        # Fonts
+        team_font = self.medium_font
+        score_font = self.medium_font
 
         # Get team logos
-        self.logger.debug(f"Loading logos for {away_abbr} @ {home_abbr} (league: {league})")
         away_logo = self._get_team_logo(league, away_abbr)
         home_logo = self._get_team_logo(league, home_abbr)
 
         if away_logo:
             away_logo = away_logo.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
-            self.logger.debug(f"Away logo loaded for {away_abbr}")
-        else:
-            self.logger.warning(f"Away logo NOT found for {away_abbr}")
-
         if home_logo:
             home_logo = home_logo.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
-            self.logger.debug(f"Home logo loaded for {home_abbr}")
-        else:
-            self.logger.warning(f"Home logo NOT found for {home_abbr}")
 
-        # Calculate text widths for layout
-        temp_draw = ImageDraw.Draw(Image.new('RGB', (1, 1)))
+        # Format team names and scores (truncate team names to 4 chars like odds-ticker)
+        away_team_text = away_abbr[:4]
+        home_team_text = home_abbr[:4]
         away_score_text = str(away_score)
         home_score_text = str(home_score)
-        away_score_width = int(temp_draw.textlength(away_score_text, font=self.medium_font))
-        home_score_width = int(temp_draw.textlength(home_score_text, font=self.medium_font))
+
+        # Calculate column widths (EXACTLY like odds-ticker)
+        temp_draw = ImageDraw.Draw(Image.new('RGB', (1, 1)))
+
+        # "vs." text width
+        vs_text = "vs."
+        vs_width = int(temp_draw.textlength(vs_text, font=team_font))
+
+        # Team names width
+        away_team_width = int(temp_draw.textlength(away_team_text, font=team_font))
+        home_team_width = int(temp_draw.textlength(home_team_text, font=team_font))
+        team_info_width = max(away_team_width, home_team_width)
+
+        # Scores width
+        away_score_width = int(temp_draw.textlength(away_score_text, font=score_font))
+        home_score_width = int(temp_draw.textlength(home_score_text, font=score_font))
         scores_width = max(away_score_width, home_score_width)
 
-        # Calculate total width needed
-        total_width = logo_size + h_padding + scores_width + h_padding + logo_size
+        # Period/clock status width
+        period_display = period_text[:8] if period_text else ""
+        clock_display = clock[:8] if clock else ""
+        period_width = int(temp_draw.textlength(period_display, font=self.small_font)) if period_display else 0
+        clock_width = int(temp_draw.textlength(clock_display, font=self.small_font)) if clock_display else 0
+        status_width = max(period_width, clock_width, 20)  # Min width of 20
 
-        # Create panel image
-        panel = Image.new('RGB', (int(total_width), height), color=COLOR_BLACK)
-        draw = ImageDraw.Draw(panel)
+        # Calculate total width (EXACTLY like odds-ticker formula)
+        total_width = (logo_size * 2) + vs_width + team_info_width + scores_width + status_width + (h_padding * 6)
 
-        # --- Draw elements (matching odds-ticker exactly) ---
+        # Create the image
+        image = Image.new('RGB', (int(total_width), height), color=COLOR_BLACK)
+        draw = ImageDraw.Draw(image)
+
+        # --- Draw elements (EXACTLY like odds-ticker) ---
         current_x = 0
 
         # Away Logo (centered vertically)
         if away_logo:
-            y_pos = (height - logo_size) // 2
-            panel.paste(away_logo, (current_x, y_pos), away_logo if away_logo.mode == 'RGBA' else None)
-        else:
-            # Fallback: draw team abbr
-            draw.text((current_x, 2), away_abbr[:4], font=self.small_font, fill=COLOR_WHITE)
+            y_pos = (height - logo_size) // 2  # Center the logo vertically
+            image.paste(away_logo, (current_x, y_pos), away_logo if away_logo.mode == 'RGBA' else None)
         current_x += logo_size + h_padding
 
-        # Scores (stacked - away on top, home on bottom)
-        away_y = 2
-        home_y = height - 10
-        draw.text((current_x, away_y), away_score_text, font=self.medium_font, fill=COLOR_WHITE)
-        draw.text((current_x, home_y), home_score_text, font=self.medium_font, fill=COLOR_WHITE)
-        current_x += scores_width + h_padding
+        # "vs." text (centered vertically)
+        draw.text((current_x, height // 2 - 4), vs_text, font=team_font, fill=(255, 255, 255))
+        current_x += vs_width + h_padding
 
         # Home Logo (centered vertically)
         if home_logo:
-            y_pos = (height - logo_size) // 2
-            panel.paste(home_logo, (current_x, y_pos), home_logo if home_logo.mode == 'RGBA' else None)
-        else:
-            # Fallback: draw team abbr
-            draw.text((current_x, height - 8), home_abbr[:4], font=self.small_font, fill=COLOR_WHITE)
+            y_pos = (height - logo_size) // 2  # Center the logo vertically
+            image.paste(home_logo, (current_x, y_pos), home_logo if home_logo.mode == 'RGBA' else None)
+        current_x += logo_size + h_padding
 
-        return panel
+        # Team names (stacked - EXACTLY like odds-ticker)
+        away_y = 2
+        home_y = height - 10
+        draw.text((current_x, away_y), away_team_text, font=team_font, fill=(255, 255, 255))
+        draw.text((current_x, home_y), home_team_text, font=team_font, fill=(255, 255, 255))
+        current_x += team_info_width + h_padding
+
+        # Scores (stacked - same y positions as team names)
+        draw.text((current_x, away_y), away_score_text, font=score_font, fill=(255, 255, 255))
+        draw.text((current_x, home_y), home_score_text, font=score_font, fill=(255, 255, 255))
+        current_x += scores_width + h_padding
+
+        # Period/Clock (stacked - same y positions)
+        if period_display:
+            draw.text((current_x, away_y), period_display, font=self.small_font, fill=(170, 170, 170))
+        if clock_display:
+            draw.text((current_x, home_y), clock_display, font=self.small_font, fill=(170, 170, 170))
+
+        return image
 
     def _render_stats_panel(self, team_abbr: str, leaders: Optional[Dict], league: str) -> Image.Image:
         """
@@ -465,12 +492,77 @@ class StatsRenderer:
             if not logo_dir_name or not team_abbr:
                 return None
 
+            # NCAA team abbreviation mapping (API name → logo filename)
+            # The NCAA API returns full/different abbreviations that don't match logo filenames
+            ncaa_abbr_map = {
+                'KANSAS': 'KU',
+                'BAYLOR': 'BAY',
+                'MIAMI': 'MIA',
+                'MIZZOU': 'MIZ',
+                'MISSOURI': 'MIZ',
+                'TEXASA&M': 'TAMU',
+                'TEXAS A&M': 'TAMU',
+                'SOUTHCAR': 'SC',
+                'SOUTH CAROLINA': 'SC',
+                'OLEMISS': 'MISS',
+                'OLE MISS': 'MISS',
+                'PENNST': 'PSU',
+                'PENN STATE': 'PSU',
+                'PITTSB': 'PITT',
+                'PITTSBURGH': 'PITT',
+                'CALBAP': 'CALST',
+                'STBONA': 'SBU',
+                'STMARY': 'SMC',
+                'STCLAR': 'SCU',
+                'STLOUI': 'SLU',
+                'STPETE': 'SPU',
+                'STFRAN': 'SFU',
+                'LOYCHI': 'LUC',
+                'LOYMAR': 'LMU',
+                'UTAHST': 'USU',
+                'UTAHVA': 'UVU',
+                'KANSST': 'KSU',
+                'OKLA ST': 'OKST',
+                'OKLAHOMA STATE': 'OKST',
+                'OREG ST': 'ORST',
+                'OREGON STATE': 'ORST',
+                'WASH ST': 'WSU',
+                'WASHINGTON STATE': 'WSU',
+                'IOWA ST': 'ISU',
+                'IOWA STATE': 'ISU',
+                'ARIZ ST': 'ASU',
+                'ARIZONA STATE': 'ASU',
+                'MICH ST': 'MSU',
+                'MICHIGAN STATE': 'MSU',
+                'OHIO ST': 'OSU',
+                'OHIO STATE': 'OSU',
+                'FRESST': 'FRES',
+                'SDIEGO': 'USD',
+                'SAN DIEGO': 'USD',
+                'SMISSO': 'SEMO',
+                'UCRIVERSIDE': 'UCR',
+                'UC RIVERSIDE': 'UCR',
+                'UCIRVINE': 'UCI',
+                'UC IRVINE': 'UCI',
+                'UCSANTABARBARA': 'UCSB',
+                'UC SANTA BARBARA': 'UCSB',
+                'UCDAVIS': 'UCD',
+                'UC DAVIS': 'UCD',
+                'UCSAN DIEGO': 'UCSD',
+                'LASALLE': 'LAS',
+                'LA SALLE': 'LAS',
+            }
+
+            # Apply NCAA mapping if this is an NCAA league
+            if league in ['ncaam', 'ncaaf']:
+                team_abbr = ncaa_abbr_map.get(team_abbr.upper(), team_abbr)
+
             # Resolve path to logo
             logo_path = self.project_root / "assets" / "sports" / logo_dir_name / f"{team_abbr}.png"
             if logo_path.exists():
                 return Image.open(logo_path)
             else:
-                self.logger.debug(f"Team logo not found: {logo_path}")
+                self.logger.debug(f"Team logo not found: {logo_path} (original: {team_abbr})")
                 return None
 
         except Exception as e:
