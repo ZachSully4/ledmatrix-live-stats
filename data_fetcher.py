@@ -191,10 +191,10 @@ class DataFetcher:
                     # Extract stat leaders from boxscore
                     if league_key in ['nba', 'ncaam']:
                         game_data['home_leaders'] = self._extract_boxscore_basketball_leaders(
-                            boxscore, 'home', expanded_stats=is_favorite and favorite_team_expanded_stats
+                            boxscore, home_abbr, expanded_stats=is_favorite and favorite_team_expanded_stats
                         )
                         game_data['away_leaders'] = self._extract_boxscore_basketball_leaders(
-                            boxscore, 'away', expanded_stats=is_favorite and favorite_team_expanded_stats
+                            boxscore, away_abbr, expanded_stats=is_favorite and favorite_team_expanded_stats
                         )
                     elif league_key in ['nfl', 'ncaaf']:
                         game_data['home_leaders'] = self._extract_boxscore_football_leaders(boxscore, 'home')
@@ -248,39 +248,40 @@ class DataFetcher:
             self.logger.debug(f"Error fetching boxscore for game {game_id}: {e}")
             return None
 
-    def _extract_boxscore_basketball_leaders(self, boxscore: Dict, home_away: str, expanded_stats: bool = False) -> Optional[Dict]:
+    def _extract_boxscore_basketball_leaders(self, boxscore: Dict, team_abbr: str, expanded_stats: bool = False) -> Optional[Dict]:
         """
         Extract basketball leaders from boxscore data.
 
         Args:
             boxscore: Boxscore response from ESPN
-            home_away: 'home' or 'away'
+            team_abbr: Team abbreviation (e.g., 'LAL', 'BOS')
             expanded_stats: If True, include STL and BLK stats
 
         Returns:
             Leaders dict or None
         """
         try:
-            self.logger.info(f"DEBUG: Extracting boxscore leaders for {home_away}, expanded_stats={expanded_stats}")
+            self.logger.info(f"DEBUG: Extracting boxscore leaders for {team_abbr}, expanded_stats={expanded_stats}")
 
             # Navigate boxscore structure
             # Boxscore typically has: boxscore.players array with team data
             players_section = boxscore.get('boxscore', {}).get('players', [])
             self.logger.info(f"DEBUG: players_section length: {len(players_section)}")
 
-            # Find the team (home is usually index 1, away is 0, but check homeAway field)
+            # Find the team by matching abbreviation
             team_data = None
-            self.logger.info(f"DEBUG: Looking for team with homeAway='{home_away}'")
+            self.logger.info(f"DEBUG: Looking for team with abbreviation='{team_abbr}'")
             for idx, team in enumerate(players_section):
                 team_info = team.get('team', {})
-                team_home_away = team_info.get('homeAway')
-                self.logger.info(f"DEBUG: Team {idx}: homeAway='{team_home_away}', all team keys: {list(team_info.keys())}")
-                if team_home_away == home_away:
+                team_abbreviation = team_info.get('abbreviation', '')
+                self.logger.info(f"DEBUG: Team {idx}: abbreviation='{team_abbreviation}'")
+                if team_abbreviation == team_abbr:
                     team_data = team
+                    self.logger.info(f"DEBUG: FOUND matching team at index {idx}")
                     break
 
             if not team_data:
-                self.logger.info(f"DEBUG: No team data found for {home_away} in boxscore")
+                self.logger.info(f"DEBUG: No team data found for abbreviation {team_abbr} in boxscore")
                 return None
 
             # Get statistics from players
