@@ -783,16 +783,17 @@ class DataFetcher:
                     reb = int(player.get('totalRebounds', 0) or 0)
                     ast = int(player.get('assists', 0) or 0)
 
-                    pts_list.append({'name': self._abbreviate_name(full_name), 'value': pts})
-                    reb_list.append({'name': self._abbreviate_name(full_name), 'value': reb})
-                    ast_list.append({'name': self._abbreviate_name(full_name), 'value': ast})
+                    # Use full names instead of abbreviated - renderer will handle splitting
+                    pts_list.append({'name': full_name, 'value': pts})
+                    reb_list.append({'name': full_name, 'value': reb})
+                    ast_list.append({'name': full_name, 'value': ast})
 
                     # Extract STL and BLK for expanded stats
                     if expanded_stats:
                         stl = int(player.get('steals', 0) or 0)
                         blk = int(player.get('blocks', 0) or 0)
-                        stl_list.append({'name': self._abbreviate_name(full_name), 'value': stl})
-                        blk_list.append({'name': self._abbreviate_name(full_name), 'value': blk})
+                        stl_list.append({'name': full_name, 'value': stl})
+                        blk_list.append({'name': full_name, 'value': blk})
 
                 except (ValueError, TypeError) as e:
                     self.logger.debug(f"Error parsing stats for {full_name}: {e}")
