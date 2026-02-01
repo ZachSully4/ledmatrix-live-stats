@@ -15,6 +15,7 @@ COLOR_WHITE = (255, 255, 255)
 COLOR_LIGHT_BLUE = (77, 190, 238)
 COLOR_GRAY = (170, 170, 170)
 COLOR_BLACK = (0, 0, 0)
+COLOR_GOLD = (255, 215, 0)
 
 
 class StatsRenderer:
@@ -48,18 +49,22 @@ class StatsRenderer:
                 self.team_font = ImageFont.truetype(str(font_path), 8)
                 self.small_font = ImageFont.truetype(str(font_path), 8)
                 self.medium_font = ImageFont.truetype(str(font_path), 8)
-                self.logger.debug(f"Loaded PressStart2P font at size 8")
+                # Load larger font for numbers in new layout
+                self.number_font = ImageFont.truetype(str(font_path), 12)
+                self.logger.debug(f"Loaded PressStart2P font at size 8 and 12")
             else:
                 self.logger.warning(f"Font not found: {font_path}, using default")
                 self.team_font = ImageFont.load_default()
                 self.small_font = ImageFont.load_default()
                 self.medium_font = ImageFont.load_default()
+                self.number_font = ImageFont.load_default()
 
         except Exception as e:
             self.logger.warning(f"Error loading fonts, using defaults: {e}")
             self.team_font = ImageFont.load_default()
             self.small_font = ImageFont.load_default()
             self.medium_font = ImageFont.load_default()
+            self.number_font = ImageFont.load_default()
 
     def render_game_card(self, game_data: Dict, card_width: int = 192) -> Image.Image:
         """
@@ -287,8 +292,14 @@ class StatsRenderer:
         """
         Render combined stats panel with both teams stacked (top/bottom).
 
-        Format per team: "PTS: Name1 9, Name2 5  REB: Name3 6, Name4 4  AST: Name5 6, Name6 4"
-        For expanded stats (favorite team): includes STL and BLK, shows all players
+        New layout with full names and large gold numbers:
+        - Away team occupies top half (0-16px)
+          - First names: 0-8px
+          - Last names: 8-16px
+        - Home team occupies bottom half (16-32px)
+          - First names: 16-24px
+          - Last names: 24-32px
+        - Numbers: Large gold text (size 12) spanning both name lines
 
         Args:
             away_leaders: Dictionary of away team stat leaders
@@ -299,86 +310,109 @@ class StatsRenderer:
         Returns:
             PIL Image of combined stats panel
         """
-        # Calculate width needed for stats text
-        # Format: "PTS: LastName 9, LastName 5  REB: LastName 6, LastName 4  AST: LastName 6, LastName 4"
-        # Estimate: ~120px minimum width for typical stats
         min_width = 200
         height = self.display_height
-
-        panel = Image.new('RGB', (min_width, height), color=COLOR_BLACK)
-        draw = ImageDraw.Draw(panel)
 
         # Determine which stats to show
         stat_names = ['PTS', 'REB', 'AST', 'STL', 'BLK'] if expanded_stats else ['PTS', 'REB', 'AST']
 
-        # Calculate max width for each stat category across both teams
-        stat_widths = {}
-        for stat_name in stat_names:
-            max_width = 0
-            for leaders in [away_leaders, home_leaders]:
-                if leaders and stat_name in leaders:
-                    # Count non-zero players
-                    non_zero_players = [l for l in leaders[stat_name] if l.get('value', 0) > 0]
-                    if non_zero_players:
-                        # Width: "STAT: " + (players * 12 chars each)
-                        player_count = len(non_zero_players)
-                        content_width = len(f"{stat_name}: ") + (player_count * 12)
-                        max_width = max(max_width, content_width)
-            stat_widths[stat_name] = max(max_width + 2, 24)
+        # Create temporary image for width calculation
+        temp_img = Image.new('RGB', (2000, height), color=COLOR_BLACK)
+        temp_draw = ImageDraw.Draw(temp_img)
 
-        # Format stat line with calculated widths
-        def format_stat_line_aligned(leaders):
+        # Helper function to draw team stats and calculate width
+        def draw_team_stats(leaders, y_base, draw_obj, calculate_only=False):
+            """
+            Draw (or calculate width of) team stats with new layout.
+
+            Args:
+                leaders: Stat leaders dictionary
+                y_base: Base Y position (0 for away, 16 for home)
+                draw_obj: ImageDraw object
+                calculate_only: If True, only calculate width without drawing
+
+            Returns:
+                Total width needed
+            """
             if not leaders:
-                return "No stats"
+                if not calculate_only:
+                    draw_obj.text((4, y_base), "No", font=self.small_font, fill=COLOR_GRAY)
+                    draw_obj.text((4, y_base + 8), "stats", font=self.small_font, fill=COLOR_GRAY)
+                return 60
 
-            gap = "  "
-            parts = []
+            x_pos = 4
+
             for stat_name in stat_names:
-                if stat_name in leaders:
-                    stat_leaders = leaders[stat_name]
-                    player_strs = []
-                    for leader in stat_leaders:
-                        name = leader.get('name', '?')
-                        value = leader.get('value', 0)
-                        if value == 0:
-                            continue
+                if stat_name not in leaders:
+                    continue
 
-                        last_name = name.split()[-1] if ' ' in name else name
-                        if len(last_name) > 8:
-                            first_name = name.split()[0] if ' ' in name else ''
-                            if first_name:
-                                last_name = f"{first_name[0]}.{last_name[:6]}"
-                            else:
-                                last_name = last_name[:8]
-                        player_strs.append(f"{last_name:<8}{value:>2}")
+                stat_leaders = leaders[stat_name]
+                non_zero_leaders = [l for l in stat_leaders if l.get('value', 0) > 0]
 
-                    if player_strs:
-                        stat_str = f"{stat_name}: {', '.join(player_strs)}"
-                        parts.append(f"{stat_str:<{stat_widths[stat_name]}}{gap}")
+                if not non_zero_leaders:
+                    continue
 
-            return "".join(parts).rstrip() if parts else "No stats"
+                # Draw stat label (e.g., "PTS:") on first name line
+                stat_label = f"{stat_name}:"
+                if not calculate_only:
+                    draw_obj.text((x_pos, y_base), stat_label, font=self.small_font, fill=COLOR_LIGHT_BLUE)
 
-        # Format both teams with aligned widths
-        away_y = 2
-        away_text = format_stat_line_aligned(away_leaders)
-        draw.text((2, away_y), away_text, font=self.small_font, fill=COLOR_WHITE)
+                label_width = int(temp_draw.textlength(stat_label, font=self.small_font))
+                x_pos += label_width + 2
 
-        home_y = height - 10
-        home_text = format_stat_line_aligned(home_leaders)
-        draw.text((2, home_y), home_text, font=self.small_font, fill=COLOR_WHITE)
+                # Draw each player in this stat category
+                for leader in non_zero_leaders:
+                    name = leader.get('name', '?')
+                    value = leader.get('value', 0)
 
-        # Calculate actual width needed based on text
-        temp_draw = ImageDraw.Draw(Image.new('RGB', (1, 1)))
-        away_width = int(temp_draw.textlength(away_text, font=self.small_font)) + 4
-        home_width = int(temp_draw.textlength(home_text, font=self.small_font)) + 4
+                    # Split name into first and last
+                    parts = name.split()
+                    first_name = parts[0] if len(parts) > 0 else name
+                    last_name = parts[-1] if len(parts) > 1 else ''
+
+                    # Draw first name on line 1 (y_base)
+                    if not calculate_only:
+                        draw_obj.text((x_pos, y_base), first_name, font=self.small_font, fill=COLOR_WHITE)
+
+                    # Draw last name on line 2 (y_base + 8)
+                    if not calculate_only:
+                        draw_obj.text((x_pos, y_base + 8), last_name, font=self.small_font, fill=COLOR_WHITE)
+
+                    # Calculate width of name section (max of first/last name widths)
+                    first_width = int(temp_draw.textlength(first_name, font=self.small_font))
+                    last_width = int(temp_draw.textlength(last_name, font=self.small_font))
+                    name_width = max(first_width, last_width)
+
+                    # Draw number in gold, positioned to the right of names
+                    # Center it vertically in the 16px section
+                    number_text = str(value)
+                    number_x = x_pos + name_width + 3
+                    number_y = y_base + 2  # Offset to center 12px font in 16px space
+
+                    if not calculate_only:
+                        draw_obj.text((number_x, number_y), number_text, font=self.number_font, fill=COLOR_GOLD)
+
+                    # Update x position for next player
+                    number_width = int(temp_draw.textlength(number_text, font=self.number_font))
+                    x_pos = number_x + number_width + 8  # Add gap between players
+
+                # Add extra gap between stat categories
+                x_pos += 8
+
+            return x_pos
+
+        # Calculate required width
+        away_width = draw_team_stats(away_leaders, 0, temp_draw, calculate_only=True)
+        home_width = draw_team_stats(home_leaders, 16, temp_draw, calculate_only=True)
         actual_width = max(away_width, home_width, min_width)
 
-        # If we need more width, recreate the panel
-        if actual_width > min_width:
-            panel = Image.new('RGB', (actual_width, height), color=COLOR_BLACK)
-            draw = ImageDraw.Draw(panel)
-            draw.text((2, away_y), away_text, font=self.small_font, fill=COLOR_WHITE)
-            draw.text((2, home_y), home_text, font=self.small_font, fill=COLOR_WHITE)
+        # Create actual panel with calculated width
+        panel = Image.new('RGB', (actual_width, height), color=COLOR_BLACK)
+        draw = ImageDraw.Draw(panel)
+
+        # Draw both teams
+        draw_team_stats(away_leaders, 0, draw, calculate_only=False)
+        draw_team_stats(home_leaders, 16, draw, calculate_only=False)
 
         return panel
 
