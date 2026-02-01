@@ -451,8 +451,8 @@ class StatsRenderer:
                     name_width = layout['name_width']
                     player_x += number_width + name_width + 6
 
-            # Move to next stat category
-            x_pos += stat_width
+            # Move to next stat category with extra spacing
+            x_pos += stat_width + 8  # Add 8px gap between categories
 
         return panel
 
