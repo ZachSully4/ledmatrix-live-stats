@@ -186,6 +186,7 @@ class DataFetcher:
             # Fetch detailed boxscore for player stats
             if game_id:
                 boxscore = self._fetch_game_boxscore(game_id, league_key)
+                self.logger.info(f"DEBUG: Boxscore fetch for game {game_id}: {'SUCCESS' if boxscore else 'FAILED'}")
                 if boxscore:
                     # Extract stat leaders from boxscore
                     if league_key in ['nba', 'ncaam']:
@@ -260,9 +261,12 @@ class DataFetcher:
             Leaders dict or None
         """
         try:
+            self.logger.info(f"DEBUG: Extracting boxscore leaders for {home_away}, expanded_stats={expanded_stats}")
+
             # Navigate boxscore structure
             # Boxscore typically has: boxscore.players array with team data
             players_section = boxscore.get('boxscore', {}).get('players', [])
+            self.logger.info(f"DEBUG: players_section length: {len(players_section)}")
 
             # Find the team (home is usually index 1, away is 0, but check homeAway field)
             team_data = None
@@ -273,18 +277,23 @@ class DataFetcher:
                     break
 
             if not team_data:
-                self.logger.debug(f"No team data found for {home_away} in boxscore")
+                self.logger.info(f"DEBUG: No team data found for {home_away} in boxscore")
                 return None
 
             # Get statistics from players
             statistics = team_data.get('statistics', [])
+            self.logger.info(f"DEBUG: statistics length: {len(statistics)}")
             if not statistics:
+                self.logger.info(f"DEBUG: No statistics found, returning None")
                 return None
 
             # Find the main stats section (usually first one with athletes)
             stats_group = statistics[0] if statistics else None
             if not stats_group:
+                self.logger.info(f"DEBUG: No stats_group found, returning None")
                 return None
+
+            self.logger.info(f"DEBUG: stats_group keys: {list(stats_group.keys())}")
 
             # Debug: Log stat labels to understand the order
             stat_labels = stats_group.get('labels', [])
