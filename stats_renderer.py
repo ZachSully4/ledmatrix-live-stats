@@ -316,6 +316,9 @@ class StatsRenderer:
             # Determine which stats to show
             stat_names = ['PTS', 'REB', 'AST', 'STL', 'BLK'] if expanded_stats else ['PTS', 'REB', 'AST']
 
+            # Fixed width per stat category for alignment (accommodates 2-3 players)
+            stat_width = 32 if not expanded_stats else 26
+
             parts = []
             for stat_name in stat_names:
                 if stat_name in leaders:
@@ -345,9 +348,10 @@ class StatsRenderer:
                     # Only add stat category if there are players with > 0
                     if player_strs:
                         stat_str = f"{stat_name}: {', '.join(player_strs)}"
-                        parts.append(stat_str)
+                        # Pad stat category to fixed width for column alignment
+                        parts.append(f"{stat_str:<{stat_width}}")
 
-            return "  ".join(parts) if parts else "No stats"
+            return "".join(parts).rstrip() if parts else "No stats"
 
         # Format away team stats (top half, y=2)
         away_y = 2
