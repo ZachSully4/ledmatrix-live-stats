@@ -415,15 +415,14 @@ class StatsRenderer:
                     draw.text((player_x, 2), first_name, font=self.small_font, fill=COLOR_WHITE)
                     draw.text((player_x, 10), last_name, font=self.small_font, fill=COLOR_WHITE)
 
-                    # Draw number (right-aligned within name width)
+                    # Draw number after name with padding (not overlapping)
                     number_text = str(value)
                     name_width = layout['name_width']
-                    number_width = int(temp_draw.textlength(number_text, font=self.number_font))
-                    number_x = player_x + name_width - number_width
+                    number_x = player_x + name_width + 2  # Position after max name width
                     draw.text((number_x, 3), number_text, font=self.number_font, fill=COLOR_GOLD)
 
                     # Move to next player
-                    player_x += name_width + layout['number_width'] + 4
+                    player_x += name_width + layout['number_width'] + 6
 
             # Draw home team players (y=18 first names, y=26 last names)
             if home_leaders and stat_name in home_leaders:
@@ -441,15 +440,14 @@ class StatsRenderer:
                     draw.text((player_x, 18), first_name, font=self.small_font, fill=COLOR_WHITE)
                     draw.text((player_x, 26), last_name, font=self.small_font, fill=COLOR_WHITE)
 
-                    # Draw number (right-aligned within name width)
+                    # Draw number after name with padding (not overlapping)
                     number_text = str(value)
                     name_width = layout['name_width']
-                    number_width = int(temp_draw.textlength(number_text, font=self.number_font))
-                    number_x = player_x + name_width - number_width
+                    number_x = player_x + name_width + 2  # Position after max name width
                     draw.text((number_x, 19), number_text, font=self.number_font, fill=COLOR_GOLD)
 
                     # Move to next player
-                    player_x += name_width + layout['number_width'] + 4
+                    player_x += name_width + layout['number_width'] + 6
 
             # Move to next stat category
             x_pos += stat_width
