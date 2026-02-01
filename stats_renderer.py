@@ -92,6 +92,7 @@ class StatsRenderer:
             away_leaders = game_data.get('away_leaders')
             home_leaders = game_data.get('home_leaders')
             league = game_data.get('league', 'ncaam')
+            expanded_stats = game_data.get('expanded_stats', False)
 
             # --- PANEL 1: Game Info with Logos (dynamically sized) ---
             panel1 = self._render_game_info_panel(away_abbr, home_abbr, away_name, home_name,
@@ -99,7 +100,7 @@ class StatsRenderer:
                                                   away_score, home_score, period_text, clock, league)
 
             # --- PANEL 2: Combined Stats (stacked top/bottom, dynamically sized) ---
-            panel2 = self._render_combined_stats_panel(away_leaders, home_leaders, league)
+            panel2 = self._render_combined_stats_panel(away_leaders, home_leaders, league, expanded_stats)
 
             # Calculate total width dynamically
             total_width = panel1.width + panel2.width
@@ -282,16 +283,18 @@ class StatsRenderer:
 
         return image
 
-    def _render_combined_stats_panel(self, away_leaders: Optional[Dict], home_leaders: Optional[Dict], league: str) -> Image.Image:
+    def _render_combined_stats_panel(self, away_leaders: Optional[Dict], home_leaders: Optional[Dict], league: str, expanded_stats: bool = False) -> Image.Image:
         """
         Render combined stats panel with both teams stacked (top/bottom).
 
         Format per team: "PTS: Name1 9, Name2 5  REB: Name3 6, Name4 4  AST: Name5 6, Name6 4"
+        For expanded stats (favorite team): includes STL and BLK, shows all players
 
         Args:
-            away_leaders: Dictionary of away team stat leaders (top 2 each)
-            home_leaders: Dictionary of home team stat leaders (top 2 each)
+            away_leaders: Dictionary of away team stat leaders
+            home_leaders: Dictionary of home team stat leaders
             league: League identifier
+            expanded_stats: If True, show STL/BLK and all players
 
         Returns:
             PIL Image of combined stats panel
@@ -310,10 +313,13 @@ class StatsRenderer:
             if not leaders:
                 return "No stats"
 
+            # Determine which stats to show
+            stat_names = ['PTS', 'REB', 'AST', 'STL', 'BLK'] if expanded_stats else ['PTS', 'REB', 'AST']
+
             parts = []
-            for stat_name in ['PTS', 'REB', 'AST']:
+            for stat_name in stat_names:
                 if stat_name in leaders:
-                    stat_leaders = leaders[stat_name]  # List of top 2
+                    stat_leaders = leaders[stat_name]  # List of leaders
                     # Format with fixed-width names for column alignment: "PTS: Name1    9, Name2    5"
                     player_strs = []
                     for leader in stat_leaders:
@@ -321,9 +327,15 @@ class StatsRenderer:
                         value = leader.get('value', 0)
                         # Use last name only for space
                         last_name = name.split()[-1] if ' ' in name else name
-                        # Truncate long names and pad to 7 chars for alignment
-                        last_name = last_name[:7]
-                        player_strs.append(f"{last_name:<7}{value:>2}")
+                        # Smart truncation: if name is too long, use first initial + last name
+                        if len(last_name) > 8:
+                            first_name = name.split()[0] if ' ' in name else ''
+                            if first_name:
+                                last_name = f"{first_name[0]}.{last_name[:6]}"
+                            else:
+                                last_name = last_name[:8]
+                        # Pad to 8 chars for alignment
+                        player_strs.append(f"{last_name:<8}{value:>2}")
 
                     stat_str = f"{stat_name}: {', '.join(player_strs)}"
                     parts.append(stat_str)

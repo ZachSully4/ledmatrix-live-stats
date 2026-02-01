@@ -62,6 +62,17 @@
           "type": "boolean",
           "default": false,
           "description": "Show only power conference games (Big Ten, Big 12, SEC, ACC, Big East, Pac-12)"
+        },
+        "favorite_teams": {
+          "type": "array",
+          "items": {"type": "string"},
+          "default": [],
+          "description": "List of favorite team abbreviations (e.g., ['PURDUE', 'ILL']). When a favorite team is playing, only show that game."
+        },
+        "favorite_team_expanded_stats": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show expanded stats (including STL, BLK) and all players for favorite team games"
         }
       },
       "default": {}

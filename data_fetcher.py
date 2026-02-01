@@ -20,11 +20,13 @@ LEAGUE_MAP = {
 # NCAA API base URL
 NCAA_API_BASE = "https://ncaa-api.henrygd.me"
 
-# Basketball stat array indices (from ESPN API)
+# Basketball stat array indices (from NCAA boxscore API)
 BASKETBALL_STAT_INDICES = {
     'PTS': 15,  # Points
     'REB': 10,  # Rebounds
-    'AST': 11   # Assists
+    'AST': 11,  # Assists
+    'STL': 13,  # Steals
+    'BLK': 14   # Blocks
 }
 
 
@@ -44,7 +46,8 @@ class DataFetcher:
         self.cache_manager = cache_manager
         self.logger = logger
 
-    def fetch_live_games(self, league_key: str, max_games: int = 50, power_conferences_only: bool = False) -> List[Dict]:
+    def fetch_live_games(self, league_key: str, max_games: int = 50, power_conferences_only: bool = False,
+                        favorite_teams: List[str] = None, favorite_team_expanded_stats: bool = True) -> List[Dict]:
         """
         Fetch live games for a specific league.
 
@@ -52,6 +55,8 @@ class DataFetcher:
             league_key: League identifier ('nba', 'nfl', 'ncaam', 'ncaaf')
             max_games: Maximum number of games to return
             power_conferences_only: Filter to only power conference games (NCAA only)
+            favorite_teams: List of favorite team abbreviations (if set, only show these teams)
+            favorite_team_expanded_stats: Show expanded stats for favorite team games
 
         Returns:
             List of game dictionaries with extracted stats
@@ -62,7 +67,7 @@ class DataFetcher:
 
         # Use NCAA API for college basketball (better player stats)
         if league_key == 'ncaam':
-            return self._fetch_ncaa_basketball_games(max_games, power_conferences_only)
+            return self._fetch_ncaa_basketball_games(max_games, power_conferences_only, favorite_teams, favorite_team_expanded_stats)
 
         sport, league = LEAGUE_MAP[league_key]
 
@@ -497,17 +502,22 @@ class DataFetcher:
         # Single name or unknown - truncate if too long
         return full_name[:10] if len(full_name) > 10 else full_name
 
-    def _fetch_ncaa_basketball_games(self, max_games: int = 50, power_conferences_only: bool = False) -> List[Dict]:
+    def _fetch_ncaa_basketball_games(self, max_games: int = 50, power_conferences_only: bool = False,
+                                     favorite_teams: List[str] = None, favorite_team_expanded_stats: bool = True) -> List[Dict]:
         """
         Fetch live NCAA Men's Basketball games using NCAA API.
 
         Args:
             max_games: Maximum number of games to return
             power_conferences_only: Filter to only power conference games
+            favorite_teams: List of favorite team abbreviations
+            favorite_team_expanded_stats: Show expanded stats for favorite teams
 
         Returns:
             List of game dictionaries with extracted stats
         """
+        if favorite_teams is None:
+            favorite_teams = []
         try:
             # Get today's date for scoreboard
             today = datetime.now()
@@ -558,8 +568,21 @@ class DataFetcher:
                     self.logger.debug(f"Skipping non-power conference game: {away_name} @ {home_name}")
                     continue
 
+                # Check favorite team filter
+                is_favorite_game = False
+                if favorite_teams:
+                    # Check if either team is a favorite
+                    if away_name.upper() in [t.upper() for t in favorite_teams] or \
+                       home_name.upper() in [t.upper() for t in favorite_teams]:
+                        is_favorite_game = True
+                        self.logger.info(f"Found favorite team game: {away_name} @ {home_name}")
+                    else:
+                        # Skip non-favorite team games when favorites are configured
+                        self.logger.debug(f"Skipping non-favorite game: {away_name} @ {home_name}")
+                        continue
+
                 # Parse game data
-                game_info = self._parse_ncaa_game(game)
+                game_info = self._parse_ncaa_game(game, is_favorite_game, favorite_team_expanded_stats)
                 if game_info:
                     live_games.append(game_info)
                     self.logger.info(f"Parsed NCAA game: {game_info.get('away_abbr')} @ {game_info.get('home_abbr')}, "
@@ -620,12 +643,14 @@ class DataFetcher:
             self.logger.debug(f"Error checking power conference: {e}")
             return False  # If can't determine, don't filter out
 
-    def _parse_ncaa_game(self, game: Dict) -> Optional[Dict]:
+    def _parse_ncaa_game(self, game: Dict, is_favorite: bool = False, expanded_stats: bool = False) -> Optional[Dict]:
         """
         Parse NCAA game data and fetch boxscore for player stats.
 
         Args:
             game: Game dictionary from NCAA API scoreboard
+            is_favorite: True if this game involves a favorite team
+            expanded_stats: True to extract expanded stats (STL, BLK)
 
         Returns:
             Dictionary with game info and stat leaders, or None if parsing fails
@@ -652,14 +677,20 @@ class DataFetcher:
                 'period': 0,  # NCAA API uses currentPeriod text
                 'clock': game.get('contestClock', ''),
                 'period_text': game.get('currentPeriod', ''),
+                'is_favorite': is_favorite,
+                'expanded_stats': is_favorite and expanded_stats,
             }
 
             # Fetch boxscore for player stats
             if game_id:
                 boxscore = self._fetch_ncaa_boxscore(game_id)
                 if boxscore:
-                    game_data['home_leaders'] = self._extract_ncaa_basketball_leaders(boxscore, is_home=True)
-                    game_data['away_leaders'] = self._extract_ncaa_basketball_leaders(boxscore, is_home=False)
+                    game_data['home_leaders'] = self._extract_ncaa_basketball_leaders(
+                        boxscore, is_home=True, expanded_stats=is_favorite and expanded_stats
+                    )
+                    game_data['away_leaders'] = self._extract_ncaa_basketball_leaders(
+                        boxscore, is_home=False, expanded_stats=is_favorite and expanded_stats
+                    )
 
             return game_data
 
@@ -690,16 +721,17 @@ class DataFetcher:
             self.logger.debug(f"Error fetching NCAA boxscore for game {game_id}: {e}")
             return None
 
-    def _extract_ncaa_basketball_leaders(self, boxscore: Dict, is_home: bool) -> Optional[Dict]:
+    def _extract_ncaa_basketball_leaders(self, boxscore: Dict, is_home: bool, expanded_stats: bool = False) -> Optional[Dict]:
         """
         Extract basketball leaders from NCAA boxscore data.
 
         Args:
             boxscore: Boxscore response from NCAA API
             is_home: True for home team, False for away team
+            expanded_stats: If True, extract STL/BLK and show all players instead of top 2
 
         Returns:
-            Leaders dict with PTS/REB/AST leaders or None
+            Leaders dict with PTS/REB/AST (and STL/BLK if expanded) leaders or None
         """
         try:
             teams_info = boxscore.get('teams', [])
@@ -732,10 +764,12 @@ class DataFetcher:
             if not player_stats:
                 return None
 
-            # Find top 2 leaders for PTS, REB, AST
+            # Find leaders for PTS, REB, AST (and STL, BLK if expanded)
             pts_list = []
             reb_list = []
             ast_list = []
+            stl_list = []
+            blk_list = []
 
             for player in player_stats:
                 first_name = player.get('firstName', '')
@@ -752,33 +786,57 @@ class DataFetcher:
                     reb_list.append({'name': self._abbreviate_name(full_name), 'value': reb})
                     ast_list.append({'name': self._abbreviate_name(full_name), 'value': ast})
 
+                    # Extract STL and BLK for expanded stats
+                    if expanded_stats:
+                        stl = int(player.get('steals', 0) or 0)
+                        blk = int(player.get('blocks', 0) or 0)
+                        stl_list.append({'name': self._abbreviate_name(full_name), 'value': stl})
+                        blk_list.append({'name': self._abbreviate_name(full_name), 'value': blk})
+
                 except (ValueError, TypeError) as e:
                     self.logger.debug(f"Error parsing stats for {full_name}: {e}")
                     continue
 
-            # Sort and get top 2 for each stat
+            # Determine how many leaders to show
+            num_leaders = 10 if expanded_stats else 2
+
+            # Sort and get leaders for each stat
             leaders = {}
 
-            # Top 2 PTS leaders
+            # PTS leaders
             pts_sorted = sorted(pts_list, key=lambda x: x['value'], reverse=True)
             if pts_sorted and pts_sorted[0]['value'] > 0:
-                leaders['PTS'] = pts_sorted[:2]  # Top 2
-                pts_str = ', '.join([f"{p['name']} {p['value']}" for p in leaders['PTS']])
-                self.logger.debug(f"PTS leaders: {pts_str}")
+                leaders['PTS'] = pts_sorted[:num_leaders]
+                pts_str = ', '.join([f"{p['name']} {p['value']}" for p in leaders['PTS'][:3]])
+                self.logger.debug(f"PTS leaders: {pts_str}...")
 
-            # Top 2 REB leaders
+            # REB leaders
             reb_sorted = sorted(reb_list, key=lambda x: x['value'], reverse=True)
             if reb_sorted and reb_sorted[0]['value'] > 0:
-                leaders['REB'] = reb_sorted[:2]  # Top 2
-                reb_str = ', '.join([f"{p['name']} {p['value']}" for p in leaders['REB']])
-                self.logger.debug(f"REB leaders: {reb_str}")
+                leaders['REB'] = reb_sorted[:num_leaders]
+                reb_str = ', '.join([f"{p['name']} {p['value']}" for p in leaders['REB'][:3]])
+                self.logger.debug(f"REB leaders: {reb_str}...")
 
-            # Top 2 AST leaders
+            # AST leaders
             ast_sorted = sorted(ast_list, key=lambda x: x['value'], reverse=True)
             if ast_sorted and ast_sorted[0]['value'] > 0:
-                leaders['AST'] = ast_sorted[:2]  # Top 2
-                ast_str = ', '.join([f"{p['name']} {p['value']}" for p in leaders['AST']])
-                self.logger.debug(f"AST leaders: {ast_str}")
+                leaders['AST'] = ast_sorted[:num_leaders]
+                ast_str = ', '.join([f"{p['name']} {p['value']}" for p in leaders['AST'][:3]])
+                self.logger.debug(f"AST leaders: {ast_str}...")
+
+            # STL and BLK for expanded stats
+            if expanded_stats:
+                stl_sorted = sorted(stl_list, key=lambda x: x['value'], reverse=True)
+                if stl_sorted and stl_sorted[0]['value'] > 0:
+                    leaders['STL'] = stl_sorted[:num_leaders]
+                    stl_str = ', '.join([f"{p['name']} {p['value']}" for p in leaders['STL'][:3]])
+                    self.logger.debug(f"STL leaders: {stl_str}...")
+
+                blk_sorted = sorted(blk_list, key=lambda x: x['value'], reverse=True)
+                if blk_sorted and blk_sorted[0]['value'] > 0:
+                    leaders['BLK'] = blk_sorted[:num_leaders]
+                    blk_str = ', '.join([f"{p['name']} {p['value']}" for p in leaders['BLK'][:3]])
+                    self.logger.debug(f"BLK leaders: {blk_str}...")
 
             return leaders if leaders else None
 
