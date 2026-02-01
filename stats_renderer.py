@@ -544,15 +544,22 @@ class StatsRenderer:
                     'AKRON': 'AKR', 'BGSU': 'BGSU', 'BUFFALO': 'BUFF', 'CMICH': 'CMU',
                     'TOLEDO': 'TOL', 'EMICH': 'EMU', 'BALLST': 'BALL', 'KENT': 'KENT'
                 }
+                original_abbr = team_abbr
                 team_abbr = ncaa_map.get(team_abbr, team_abbr)
+                if original_abbr != team_abbr:
+                    self.logger.info(f"NCAA mapping: {original_abbr} → {team_abbr}")
 
             # Resolve path relative to project root
             logo_path = self.project_root / "assets" / "sports" / logo_dir_name / f"{team_abbr}.png"
+            self.logger.info(f"Looking for logo: {logo_path} (exists: {logo_path.exists()})")
+
             if logo_path.exists():
-                self.logger.debug(f"Loading logo: {logo_path}")
+                self.logger.info(f"✓ Loading logo: {logo_path}")
                 return Image.open(logo_path)
             else:
-                self.logger.warning(f"Team logo not found: {logo_path}")
+                self.logger.warning(f"✗ Team logo NOT FOUND: {logo_path}")
+                self.logger.warning(f"  Project root: {self.project_root}")
+                self.logger.warning(f"  League: {league}, Original abbr: {team_abbr}")
                 return None
 
         except Exception as e:
