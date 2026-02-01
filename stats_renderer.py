@@ -308,61 +308,63 @@ class StatsRenderer:
         panel = Image.new('RGB', (min_width, height), color=COLOR_BLACK)
         draw = ImageDraw.Draw(panel)
 
-        # Helper function to format stat line for one team with column alignment
-        def format_stat_line(leaders):
+        # Determine which stats to show
+        stat_names = ['PTS', 'REB', 'AST', 'STL', 'BLK'] if expanded_stats else ['PTS', 'REB', 'AST']
+
+        # Calculate max width for each stat category across both teams
+        stat_widths = {}
+        for stat_name in stat_names:
+            max_width = 0
+            for leaders in [away_leaders, home_leaders]:
+                if leaders and stat_name in leaders:
+                    # Count non-zero players
+                    non_zero_players = [l for l in leaders[stat_name] if l.get('value', 0) > 0]
+                    if non_zero_players:
+                        # Width: "STAT: " + (players * 12 chars each)
+                        player_count = len(non_zero_players)
+                        content_width = len(f"{stat_name}: ") + (player_count * 12)
+                        max_width = max(max_width, content_width)
+            stat_widths[stat_name] = max(max_width + 2, 24)
+
+        # Format stat line with calculated widths
+        def format_stat_line_aligned(leaders):
             if not leaders:
                 return "No stats"
 
-            # Determine which stats to show
-            stat_names = ['PTS', 'REB', 'AST', 'STL', 'BLK'] if expanded_stats else ['PTS', 'REB', 'AST']
-
-            # Fixed width per stat category for alignment (accommodates 2-3 players)
-            stat_width = 30 if not expanded_stats else 24
-            gap = "  "  # Gap between stat categories
-
+            gap = "  "
             parts = []
             for stat_name in stat_names:
                 if stat_name in leaders:
-                    stat_leaders = leaders[stat_name]  # List of leaders
-                    # Format with fixed-width names for column alignment: "PTS: Name1    9, Name2    5"
+                    stat_leaders = leaders[stat_name]
                     player_strs = []
                     for leader in stat_leaders:
                         name = leader.get('name', '?')
                         value = leader.get('value', 0)
-
-                        # Skip players with 0 for this stat
                         if value == 0:
                             continue
 
-                        # Use last name only for space
                         last_name = name.split()[-1] if ' ' in name else name
-                        # Smart truncation: if name is too long, use first initial + last name
                         if len(last_name) > 8:
                             first_name = name.split()[0] if ' ' in name else ''
                             if first_name:
                                 last_name = f"{first_name[0]}.{last_name[:6]}"
                             else:
                                 last_name = last_name[:8]
-                        # Pad to 8 chars for alignment
                         player_strs.append(f"{last_name:<8}{value:>2}")
 
-                    # Only add stat category if there are players with > 0
                     if player_strs:
                         stat_str = f"{stat_name}: {', '.join(player_strs)}"
-                        # Pad stat category to fixed width and add gap
-                        parts.append(f"{stat_str:<{stat_width}}{gap}")
+                        parts.append(f"{stat_str:<{stat_widths[stat_name]}}{gap}")
 
-            # Join and remove trailing gap/spaces
             return "".join(parts).rstrip() if parts else "No stats"
 
-        # Format away team stats (top half, y=2)
+        # Format both teams with aligned widths
         away_y = 2
-        away_text = format_stat_line(away_leaders)
+        away_text = format_stat_line_aligned(away_leaders)
         draw.text((2, away_y), away_text, font=self.small_font, fill=COLOR_WHITE)
 
-        # Format home team stats (bottom half, y=height-10)
         home_y = height - 10
-        home_text = format_stat_line(home_leaders)
+        home_text = format_stat_line_aligned(home_leaders)
         draw.text((2, home_y), home_text, font=self.small_font, fill=COLOR_WHITE)
 
         # Calculate actual width needed based on text
