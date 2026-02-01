@@ -278,7 +278,8 @@ class DataFetcher:
             max_ast = {'name': None, 'value': 0}
 
             for athlete in athletes:
-                name = athlete.get('athlete', {}).get('shortName', athlete.get('athlete', {}).get('displayName', 'Unknown'))
+                # Use displayName (full name) instead of shortName (last name only)
+                name = athlete.get('athlete', {}).get('displayName', athlete.get('athlete', {}).get('shortName', 'Unknown'))
                 stats = athlete.get('stats', [])
 
                 # Stats are usually strings in order, need to find PTS/REB/AST
@@ -375,10 +376,10 @@ class DataFetcher:
                             value = int(stats[stat_index])
                             if value > max_value:
                                 max_value = value
-                                # Use shortName if available, otherwise displayName
+                                # Use displayName (full name) instead of shortName (last name only)
                                 athlete_info = athlete.get('athlete', {})
-                                top_player = athlete_info.get('shortName',
-                                            athlete_info.get('displayName', 'Unknown'))
+                                top_player = athlete_info.get('displayName',
+                                            athlete_info.get('shortName', 'Unknown'))
                     except (ValueError, TypeError, IndexError):
                         continue
 
