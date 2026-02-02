@@ -155,6 +155,8 @@ class LivePlayerStatsPlugin(BasePlugin):
         favorite_team_expanded_stats = data_settings.get('favorite_team_expanded_stats', True)
 
         # Try current league
+        self.logger.info(f"Fetching new data for {self.league_rotation_order[self.current_league_index]['key']}...")
+        fetch_start = time.time()
         current = self.league_rotation_order[self.current_league_index]
         live_games = self.data_fetcher.fetch_live_games(
             current['key'],
@@ -163,6 +165,8 @@ class LivePlayerStatsPlugin(BasePlugin):
             favorite_teams=favorite_teams,
             favorite_team_expanded_stats=favorite_team_expanded_stats
         )
+        fetch_duration = time.time() - fetch_start
+        self.logger.info(f"Data fetch took {fetch_duration:.2f} seconds ({len(live_games) if live_games else 0} games)")
 
         if not live_games:
             # Rotate to next league
@@ -202,10 +206,15 @@ class LivePlayerStatsPlugin(BasePlugin):
         self.completed_cycle_since_update = False  # Reset cycle completion flag
 
         # Render scrolling content
+        render_start = time.time()
         self._render_scrolling_content()
+        render_duration = time.time() - render_start
+        self.logger.info(f"Rendering scrolling content took {render_duration:.2f} seconds")
 
         # Reset scroll position to start fresh cycle
+        self.logger.info("Resetting scroll position to start new cycle")
         self.reset_cycle_state()
+        self.logger.info("Scroll reset complete - ready to display")
 
     def _render_scrolling_content(self):
         """Render scrolling ticker image from game data."""
@@ -264,6 +273,15 @@ class LivePlayerStatsPlugin(BasePlugin):
 
             # Update scroll position
             self.scroll_helper.update_scroll_position()
+
+            # Log scroll position occasionally for debugging
+            if hasattr(self, '_last_pos_log_time'):
+                if time.time() - self._last_pos_log_time > 5:  # Log every 5 seconds
+                    scroll_pos = getattr(self.scroll_helper, 'scroll_position', 'unknown')
+                    self.logger.debug(f"Scroll position: {scroll_pos}")
+                    self._last_pos_log_time = time.time()
+            else:
+                self._last_pos_log_time = time.time()
 
             # Check if a cycle just completed
             if self.is_cycle_complete() and not self.completed_cycle_since_update:
