@@ -262,9 +262,9 @@ class LivePlayerStatsPlugin(BasePlugin):
             element_gap=16  # Internal spacing
         )
 
-        # Verify scrolling image was created
-        if hasattr(self.scroll_helper, 'scrolling_image') and self.scroll_helper.scrolling_image:
-            scroll_width = self.scroll_helper.scrolling_image.width
+        # Verify scrolling image was created (ScrollHelper stores it in cached_image)
+        if hasattr(self.scroll_helper, 'cached_image') and self.scroll_helper.cached_image:
+            scroll_width = self.scroll_helper.cached_image.width
             self.logger.info(f"Scrolling content created successfully - width: {scroll_width}px")
         else:
             self.logger.error("Scrolling image was NOT created by scroll_helper!")
@@ -288,7 +288,7 @@ class LivePlayerStatsPlugin(BasePlugin):
             if self.total_display_calls % 50 == 0:
                 time_since_reset = time.time() - self.last_reset_time
                 scroll_pos = getattr(self.scroll_helper, 'scroll_position', 'unknown')
-                has_scrolling_image = hasattr(self.scroll_helper, 'scrolling_image') and self.scroll_helper.scrolling_image is not None
+                has_scrolling_image = hasattr(self.scroll_helper, 'cached_image') and self.scroll_helper.cached_image is not None
                 cycle_complete = self.is_cycle_complete()
 
                 self.logger.info(
@@ -316,7 +316,7 @@ class LivePlayerStatsPlugin(BasePlugin):
                 self.logger.warning(
                     f"ScrollHelper returned None for visible portion | "
                     f"Calls since reset: {self.display_calls_since_reset} | "
-                    f"Has scrolling image: {hasattr(self.scroll_helper, 'scrolling_image') and self.scroll_helper.scrolling_image is not None}"
+                    f"Has scrolling image: {hasattr(self.scroll_helper, 'cached_image') and self.scroll_helper.cached_image is not None}"
                 )
                 return
 
@@ -375,7 +375,7 @@ class LivePlayerStatsPlugin(BasePlugin):
         self.display_calls_since_reset = 0  # Reset display call counter
 
         # Log post-reset state
-        has_scrolling_image = hasattr(self.scroll_helper, 'scrolling_image') and self.scroll_helper.scrolling_image is not None
+        has_scrolling_image = hasattr(self.scroll_helper, 'cached_image') and self.scroll_helper.cached_image is not None
         scroll_pos = getattr(self.scroll_helper, 'scroll_position', 'unknown')
         self.logger.info(
             f"[RESET] Post-reset state: "
