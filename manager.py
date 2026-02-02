@@ -85,6 +85,7 @@ class LivePlayerStatsPlugin(BasePlugin):
         self.ticker_image = None
         self.last_data_update = 0  # Track when data was last fetched
         self.needs_initial_update = True  # Flag for first update
+        self.completed_cycle_since_update = False  # Track if at least one cycle completed since last data update
 
         # Enable high FPS scrolling mode
         self.enable_scrolling = True
@@ -135,10 +136,12 @@ class LivePlayerStatsPlugin(BasePlugin):
 
         # Only fetch new data if:
         # 1. This is the initial update, OR
-        # 2. Update interval has passed AND scroll cycle is complete
+        # 2. Update interval has passed AND at least one cycle completed AND current cycle is complete
         should_fetch_data = (
             self.needs_initial_update or
-            (time_since_update >= update_interval and self.is_cycle_complete())
+            (time_since_update >= update_interval and
+             self.completed_cycle_since_update and
+             self.is_cycle_complete())
         )
 
         if not should_fetch_data:
@@ -196,6 +199,7 @@ class LivePlayerStatsPlugin(BasePlugin):
         # Update timing
         self.last_data_update = time.time()
         self.needs_initial_update = False
+        self.completed_cycle_since_update = False  # Reset cycle completion flag
 
         # Render scrolling content
         self._render_scrolling_content()
@@ -260,6 +264,11 @@ class LivePlayerStatsPlugin(BasePlugin):
 
             # Update scroll position
             self.scroll_helper.update_scroll_position()
+
+            # Check if a cycle just completed
+            if self.is_cycle_complete() and not self.completed_cycle_since_update:
+                self.completed_cycle_since_update = True
+                self.logger.debug("Scroll cycle completed - ready for data update after next cycle completion")
 
             # Get visible portion of scrolling image
             visible_image = self.scroll_helper.get_visible_portion()
