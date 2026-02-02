@@ -149,6 +149,10 @@ class LivePlayerStatsPlugin(BasePlugin):
 
         if not should_fetch_data:
             # Continue scrolling with existing data
+            # But if cycle is complete, reset to continue looping (prevents frozen frame)
+            if self.is_cycle_complete():
+                self.logger.info("Cycle complete but not ready for data update - resetting scroll to loop again")
+                self.reset_cycle_state()
             return
 
         # Get data settings
@@ -307,11 +311,7 @@ class LivePlayerStatsPlugin(BasePlugin):
             # Check if a cycle just completed
             if self.is_cycle_complete() and not self.completed_cycle_since_update:
                 self.completed_cycle_since_update = True
-                self.logger.info("Scroll cycle completed - ready for data update after next cycle completion")
-                # Reset scroll immediately to continue looping (prevents frozen frame)
-                # This keeps animation flowing until new data is fetched (every 60s)
-                self.logger.info("Resetting scroll to continue looping with current data")
-                self.reset_cycle_state()
+                self.logger.info("Scroll cycle completed - ready for data update on next update() call")
 
             # Get visible portion of scrolling image
             visible_image = self.scroll_helper.get_visible_portion()
