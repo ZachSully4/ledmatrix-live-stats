@@ -360,7 +360,8 @@ class StatsRenderer:
 
             # Calculate total width for this stat category
             # Width = label + padding + (name + number + gap) * max_players + padding
-            stat_width = label_width + 4 + (max_name_width + max_number_width + 4) * max(max_players, 1) + 4
+            # Increased gap between number and name from 4 to 6 for better spacing
+            stat_width = label_width + 4 + (max_name_width + max_number_width + 6) * max(max_players, 1) + 4
 
             stat_layouts[stat_name] = {
                 'width': max(stat_width, 40),  # Minimum 40px per stat
@@ -420,9 +421,9 @@ class StatsRenderer:
                     number_text = str(value)
                     draw.text((player_x, 3), number_text, font=self.number_font, fill=COLOR_GOLD)
 
-                    # Draw names after number with padding
+                    # Draw names after number with padding (increased from 2 to 4 for better spacing)
                     number_width = layout['number_width']
-                    name_x = player_x + number_width + 2
+                    name_x = player_x + number_width + 4
                     draw.text((name_x, 2), first_name, font=self.small_font, fill=COLOR_WHITE)
                     draw.text((name_x, 10), last_name, font=self.small_font, fill=COLOR_WHITE)
 
@@ -446,9 +447,9 @@ class StatsRenderer:
                     number_text = str(value)
                     draw.text((player_x, 19), number_text, font=self.number_font, fill=COLOR_GOLD)
 
-                    # Draw names after number with padding
+                    # Draw names after number with padding (increased from 2 to 4 for better spacing)
                     number_width = layout['number_width']
-                    name_x = player_x + number_width + 2
+                    name_x = player_x + number_width + 4
                     draw.text((name_x, 18), first_name, font=self.small_font, fill=COLOR_WHITE)
                     draw.text((name_x, 26), last_name, font=self.small_font, fill=COLOR_WHITE)
 
