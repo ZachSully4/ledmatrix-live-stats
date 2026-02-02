@@ -7,6 +7,7 @@ Shows scrolling stat leaders for each live game with automatic league rotation.
 
 import sys
 import os
+import time
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
@@ -82,6 +83,8 @@ class LivePlayerStatsPlugin(BasePlugin):
         # Plugin state
         self.games_data = []
         self.ticker_image = None
+        self.last_data_update = 0  # Track when data was last fetched
+        self.needs_initial_update = True  # Flag for first update
 
         # Enable high FPS scrolling mode
         self.enable_scrolling = True
@@ -115,6 +118,8 @@ class LivePlayerStatsPlugin(BasePlugin):
 
         Implements league rotation: if no live games found in current league,
         rotates to next enabled league until live games are found.
+
+        Data is only fetched after scroll cycle completes to avoid interrupting scrolling.
         """
         if not self.league_rotation_order:
             self.logger.warning("No leagues enabled")
@@ -122,8 +127,25 @@ class LivePlayerStatsPlugin(BasePlugin):
             self._render_scrolling_content()
             return
 
-        # Get data settings
+        # Check if we should fetch new data
+        current_time = time.time()
         data_settings = self.config.get('data_settings', {})
+        update_interval = data_settings.get('update_interval', 60)
+        time_since_update = current_time - self.last_data_update
+
+        # Only fetch new data if:
+        # 1. This is the initial update, OR
+        # 2. Update interval has passed AND scroll cycle is complete
+        should_fetch_data = (
+            self.needs_initial_update or
+            (time_since_update >= update_interval and self.is_cycle_complete())
+        )
+
+        if not should_fetch_data:
+            # Continue scrolling with existing data
+            return
+
+        # Get data settings
         max_games = data_settings.get('max_games_per_league', 50)
         power_conferences_only = data_settings.get('power_conferences_only', False)
         favorite_teams = data_settings.get('favorite_teams', [])
@@ -171,8 +193,15 @@ class LivePlayerStatsPlugin(BasePlugin):
         # Update games data
         self.games_data = live_games
 
+        # Update timing
+        self.last_data_update = time.time()
+        self.needs_initial_update = False
+
         # Render scrolling content
         self._render_scrolling_content()
+
+        # Reset scroll position to start fresh cycle
+        self.reset_cycle_state()
 
     def _render_scrolling_content(self):
         """Render scrolling ticker image from game data."""
