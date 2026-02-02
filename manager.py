@@ -88,6 +88,7 @@ class LivePlayerStatsPlugin(BasePlugin):
         self.completed_cycle_since_update = False  # Track if at least one cycle completed since last data update
         self.last_reset_time = 0  # Track when scroll was last reset
         self.display_calls_since_reset = 0  # Track display calls after reset
+        self.total_display_calls = 0  # Track total display calls for debugging
 
         # Enable high FPS scrolling mode
         self.enable_scrolling = True
@@ -254,13 +255,19 @@ class LivePlayerStatsPlugin(BasePlugin):
             return
 
         # Create scrolling image with game cards
+        self.logger.info(f"Creating scrolling content with {len(game_cards)} game cards")
         self.scroll_helper.create_scrolling_image(
             content_items=game_cards,
             item_gap=32,  # Gap between games
             element_gap=16  # Internal spacing
         )
 
-        self.logger.debug(f"Created scrolling content with {len(game_cards)} game cards")
+        # Verify scrolling image was created
+        if hasattr(self.scroll_helper, 'scrolling_image') and self.scroll_helper.scrolling_image:
+            scroll_width = self.scroll_helper.scrolling_image.width
+            self.logger.info(f"Scrolling content created successfully - width: {scroll_width}px")
+        else:
+            self.logger.error("Scrolling image was NOT created by scroll_helper!")
 
     def display(self, force_clear=False):
         """
@@ -273,31 +280,44 @@ class LivePlayerStatsPlugin(BasePlugin):
             if force_clear:
                 self.display_manager.clear()
 
-            # Increment display call counter (used to prevent premature cycle completion)
+            # Increment display call counters
             self.display_calls_since_reset += 1
+            self.total_display_calls += 1
+
+            # Detailed diagnostic logging every 50 calls
+            if self.total_display_calls % 50 == 0:
+                time_since_reset = time.time() - self.last_reset_time
+                scroll_pos = getattr(self.scroll_helper, 'scroll_position', 'unknown')
+                has_scrolling_image = hasattr(self.scroll_helper, 'scrolling_image') and self.scroll_helper.scrolling_image is not None
+                cycle_complete = self.is_cycle_complete()
+
+                self.logger.info(
+                    f"[DIAGNOSTIC] Display call #{self.total_display_calls} | "
+                    f"Calls since reset: {self.display_calls_since_reset} | "
+                    f"Time since reset: {time_since_reset:.1f}s | "
+                    f"Scroll pos: {scroll_pos} | "
+                    f"Has scrolling image: {has_scrolling_image} | "
+                    f"Cycle complete: {cycle_complete} | "
+                    f"Games data: {len(self.games_data)}"
+                )
 
             # Update scroll position
             self.scroll_helper.update_scroll_position()
 
-            # Log scroll position occasionally for debugging
-            if hasattr(self, '_last_pos_log_time'):
-                if time.time() - self._last_pos_log_time > 5:  # Log every 5 seconds
-                    scroll_pos = getattr(self.scroll_helper, 'scroll_position', 'unknown')
-                    self.logger.debug(f"Scroll position: {scroll_pos}")
-                    self._last_pos_log_time = time.time()
-            else:
-                self._last_pos_log_time = time.time()
-
             # Check if a cycle just completed
             if self.is_cycle_complete() and not self.completed_cycle_since_update:
                 self.completed_cycle_since_update = True
-                self.logger.debug("Scroll cycle completed - ready for data update after next cycle completion")
+                self.logger.info("Scroll cycle completed - ready for data update after next cycle completion")
 
             # Get visible portion of scrolling image
             visible_image = self.scroll_helper.get_visible_portion()
 
             if visible_image is None:
-                self.logger.warning("ScrollHelper returned None for visible portion")
+                self.logger.warning(
+                    f"ScrollHelper returned None for visible portion | "
+                    f"Calls since reset: {self.display_calls_since_reset} | "
+                    f"Has scrolling image: {hasattr(self.scroll_helper, 'scrolling_image') and self.scroll_helper.scrolling_image is not None}"
+                )
                 return
 
             # Display the visible portion
@@ -323,6 +343,13 @@ class LivePlayerStatsPlugin(BasePlugin):
                     self.display_manager.image.paste(visible_image, (0, 0))
 
                 self.display_manager.update_display()
+            else:
+                # visible_image is falsy (empty image?)
+                self.logger.warning(
+                    f"Visible image is falsy but not None | "
+                    f"Type: {type(visible_image)} | "
+                    f"Calls since reset: {self.display_calls_since_reset}"
+                )
 
         except Exception as e:
             self.logger.error(f"Error displaying player stats: {e}", exc_info=True)
@@ -342,9 +369,19 @@ class LivePlayerStatsPlugin(BasePlugin):
 
     def reset_cycle_state(self):
         """Reset scroll cycle state."""
+        self.logger.info(f"[RESET] Resetting scroll cycle (total display calls: {self.total_display_calls})")
         self.scroll_helper.reset_scroll()
         self.last_reset_time = time.time()  # Record reset time
         self.display_calls_since_reset = 0  # Reset display call counter
+
+        # Log post-reset state
+        has_scrolling_image = hasattr(self.scroll_helper, 'scrolling_image') and self.scroll_helper.scrolling_image is not None
+        scroll_pos = getattr(self.scroll_helper, 'scroll_position', 'unknown')
+        self.logger.info(
+            f"[RESET] Post-reset state: "
+            f"Has scrolling image: {has_scrolling_image} | "
+            f"Scroll position: {scroll_pos}"
+        )
 
     def get_display_duration(self):
         """Get dynamic display duration based on scroll content."""
