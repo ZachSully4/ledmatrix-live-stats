@@ -8,6 +8,7 @@ Shows scrolling stat leaders for each live game with automatic league rotation.
 import sys
 import os
 import time
+import threading
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
@@ -37,7 +38,8 @@ class LivePlayerStatsPlugin(BasePlugin):
     - Displays stat leaders for live NBA, NFL, NCAAM, and NCAAF games
     - Basketball: Shows PTS/REB/AST leaders
     - Football: Shows QB/WR/RB leaders with YDS/TD
-    - Scrolling ticker display with dynamic duration
+    - Continuous scrolling ticker with seamless looping
+    - Background data updates applied at natural scroll break points
     - Automatic league rotation when no live games found
     """
 
@@ -76,6 +78,9 @@ class LivePlayerStatsPlugin(BasePlugin):
         self.scroll_helper.set_scroll_delay(display_opts.get('scroll_delay', 0.02))
         self.scroll_helper.set_target_fps(display_opts.get('target_fps', 120))
 
+        # Enable continuous scrolling (no freeze/clamp at end of cycle)
+        self.scroll_helper.continuous_mode = True
+
         # Build league rotation order
         self.league_rotation_order = self._build_rotation_order()
         self.current_league_index = 0
@@ -83,12 +88,14 @@ class LivePlayerStatsPlugin(BasePlugin):
         # Plugin state
         self.games_data = []
         self.ticker_image = None
-        self.last_data_update = 0  # Track when data was last fetched
-        self.needs_initial_update = True  # Flag for first update
-        self.completed_cycle_since_update = False  # Track if at least one cycle completed since last data update
-        self.last_reset_time = 0  # Track when scroll was last reset
-        self.display_calls_since_reset = 0  # Track display calls after reset
-        self.total_display_calls = 0  # Track total display calls for debugging
+        self.last_data_update = 0
+        self.needs_initial_update = True
+
+        # Background data fetching
+        self._pending_games_data = None
+        self._pending_data_ready = False
+        self._fetch_in_progress = False
+        self._fetch_lock = threading.Lock()
 
         # Enable high FPS scrolling mode
         self.enable_scrolling = True
@@ -118,12 +125,12 @@ class LivePlayerStatsPlugin(BasePlugin):
 
     def update(self):
         """
-        Update plugin data - fetch live games and render scrolling content.
+        Update plugin data - fetch live games for display.
 
-        Implements league rotation: if no live games found in current league,
-        rotates to next enabled league until live games are found.
-
-        Data is only fetched after scroll cycle completes to avoid interrupting scrolling.
+        On initial call, fetches synchronously to have data ready.
+        On subsequent calls, fetches in a background thread to avoid
+        blocking the display loop. New data is applied at the next
+        scroll wrap-around for a seamless visual transition.
         """
         if not self.league_rotation_order:
             self.logger.warning("No leagues enabled")
@@ -131,40 +138,86 @@ class LivePlayerStatsPlugin(BasePlugin):
             self._render_scrolling_content()
             return
 
-        # Check if we should fetch new data
+        # Initial update: fetch synchronously (need data before first display)
+        if self.needs_initial_update:
+            self._fetch_data_sync()
+            return
+
+        # Subsequent updates: start background fetch if interval has passed
         current_time = time.time()
         data_settings = self.config.get('data_settings', {})
         update_interval = data_settings.get('update_interval', 60)
         time_since_update = current_time - self.last_data_update
 
-        # Only fetch new data if:
-        # 1. This is the initial update, OR
-        # 2. Update interval has passed AND at least one cycle completed AND current cycle is complete
-        should_fetch_data = (
-            self.needs_initial_update or
-            (time_since_update >= update_interval and
-             self.completed_cycle_since_update and
-             self.is_cycle_complete())
+        if time_since_update >= update_interval and not self._fetch_in_progress:
+            self.logger.info(
+                "Starting background data fetch (%.1fs since last update)",
+                time_since_update
+            )
+            self._start_background_fetch()
+
+    def _fetch_data_sync(self):
+        """Perform initial synchronous data fetch."""
+        self.logger.info("Performing initial synchronous data fetch")
+        fetch_start = time.time()
+        live_games = self._fetch_games()
+        fetch_duration = time.time() - fetch_start
+
+        self.games_data = live_games if live_games else []
+        self.last_data_update = time.time()
+        self.needs_initial_update = False
+
+        self.logger.info(
+            "Initial fetch completed in %.2fs (%d games)",
+            fetch_duration, len(self.games_data)
         )
+        self._render_scrolling_content()
 
-        if not should_fetch_data:
-            # Continue scrolling with existing data
-            # But if cycle is complete, reset to continue looping (prevents frozen frame)
-            if self.is_cycle_complete():
-                self.logger.info("Cycle complete but not ready for data update - resetting scroll to loop again")
-                self.reset_cycle_state()
-            return
+    def _start_background_fetch(self):
+        """Start a background thread to fetch new game data."""
+        self._fetch_in_progress = True
+        thread = threading.Thread(target=self._background_fetch_data, daemon=True)
+        thread.start()
 
-        # Get data settings
+    def _background_fetch_data(self):
+        """Background thread: fetch game data and store as pending."""
+        try:
+            fetch_start = time.time()
+            live_games = self._fetch_games()
+            fetch_duration = time.time() - fetch_start
+
+            with self._fetch_lock:
+                self._pending_games_data = live_games if live_games else []
+                self._pending_data_ready = True
+
+            self.last_data_update = time.time()
+            self.logger.info(
+                "Background fetch completed in %.2fs (%d games, pending swap at next wrap)",
+                fetch_duration,
+                len(self._pending_games_data) if self._pending_games_data else 0
+            )
+        except Exception as e:
+            self.logger.error(f"Background data fetch error: {e}", exc_info=True)
+        finally:
+            self._fetch_in_progress = False
+
+    def _fetch_games(self):
+        """
+        Fetch live games, rotating through leagues if needed.
+
+        Returns:
+            List of game dictionaries, or empty list if no games found
+        """
+        data_settings = self.config.get('data_settings', {})
         max_games = data_settings.get('max_games_per_league', 50)
         power_conferences_only = data_settings.get('power_conferences_only', False)
         favorite_teams = data_settings.get('favorite_teams', [])
         favorite_team_expanded_stats = data_settings.get('favorite_team_expanded_stats', True)
 
-        # Try current league
-        self.logger.info(f"Fetching new data for {self.league_rotation_order[self.current_league_index]['key']}...")
-        fetch_start = time.time()
+        # Try current league first
         current = self.league_rotation_order[self.current_league_index]
+        self.logger.info(f"Fetching data for {current['key']}...")
+
         live_games = self.data_fetcher.fetch_live_games(
             current['key'],
             max_games=max_games,
@@ -172,56 +225,39 @@ class LivePlayerStatsPlugin(BasePlugin):
             favorite_teams=favorite_teams,
             favorite_team_expanded_stats=favorite_team_expanded_stats
         )
-        fetch_duration = time.time() - fetch_start
-        self.logger.info(f"Data fetch took {fetch_duration:.2f} seconds ({len(live_games) if live_games else 0} games)")
 
-        if not live_games:
-            # Rotate to next league
-            original_index = self.current_league_index
-            attempts = 0
+        if live_games:
+            self.logger.info(
+                f"Found {len(live_games)} live games in {current['key']}"
+            )
+            return live_games
 
-            while attempts < len(self.league_rotation_order):
-                self.current_league_index = (self.current_league_index + 1) % len(self.league_rotation_order)
-                next_league = self.league_rotation_order[self.current_league_index]
-                live_games = self.data_fetcher.fetch_live_games(
-                    next_league['key'],
-                    max_games=max_games,
-                    power_conferences_only=power_conferences_only,
-                    favorite_teams=favorite_teams,
-                    favorite_team_expanded_stats=favorite_team_expanded_stats
+        # No games in current league - rotate through others
+        attempts = 0
+        while attempts < len(self.league_rotation_order):
+            self.current_league_index = (
+                (self.current_league_index + 1) % len(self.league_rotation_order)
+            )
+            next_league = self.league_rotation_order[self.current_league_index]
+
+            live_games = self.data_fetcher.fetch_live_games(
+                next_league['key'],
+                max_games=max_games,
+                power_conferences_only=power_conferences_only,
+                favorite_teams=favorite_teams,
+                favorite_team_expanded_stats=favorite_team_expanded_stats
+            )
+
+            if live_games:
+                self.logger.info(
+                    f"Rotated to {next_league['key']} ({len(live_games)} live games)"
                 )
+                return live_games
 
-                if live_games:
-                    self.logger.info(f"Rotated from {current['key']} to {next_league['key']} ({len(live_games)} live games)")
-                    break
+            attempts += 1
 
-                attempts += 1
-
-            if not live_games:
-                # No live games in any league
-                self.logger.info("No live games in any enabled league")
-                self.games_data = []
-                self._render_scrolling_content()
-                return
-
-        # Update games data
-        self.games_data = live_games
-
-        # Update timing
-        self.last_data_update = time.time()
-        self.needs_initial_update = False
-        self.completed_cycle_since_update = False  # Reset cycle completion flag
-
-        # Render scrolling content
-        render_start = time.time()
-        self._render_scrolling_content()
-        render_duration = time.time() - render_start
-        self.logger.info(f"Rendering scrolling content took {render_duration:.2f} seconds")
-
-        # Reset scroll position to start fresh cycle
-        self.logger.info("Resetting scroll position to start new cycle")
-        self.reset_cycle_state()
-        self.logger.info("Scroll reset complete - ready to display")
+        self.logger.info("No live games found in any enabled league")
+        return []
 
     def _render_scrolling_content(self):
         """Render scrolling ticker image from game data."""
@@ -266,16 +302,21 @@ class LivePlayerStatsPlugin(BasePlugin):
             element_gap=16  # Internal spacing
         )
 
-        # Verify scrolling image was created (ScrollHelper stores it in cached_image)
+        # Verify scrolling image was created
         if hasattr(self.scroll_helper, 'cached_image') and self.scroll_helper.cached_image:
             scroll_width = self.scroll_helper.cached_image.width
-            self.logger.info(f"Scrolling content created successfully - width: {scroll_width}px")
+            self.logger.info(f"Scrolling content created - width: {scroll_width}px")
         else:
             self.logger.error("Scrolling image was NOT created by scroll_helper!")
 
     def display(self, force_clear=False):
         """
         Display scrolling player stats.
+
+        Handles continuous scrolling with seamless data updates:
+        - Scroll wraps naturally at end of content
+        - At wrap-around, pending data (from background fetch) is applied
+        - No visual jumps or black screens during updates
 
         Args:
             force_clear: If True, clear display before rendering
@@ -284,122 +325,106 @@ class LivePlayerStatsPlugin(BasePlugin):
             if force_clear:
                 self.display_manager.clear()
 
-            # Increment display call counters
-            self.display_calls_since_reset += 1
-            self.total_display_calls += 1
-
-            # Detailed diagnostic logging every 50 calls
-            if self.total_display_calls % 50 == 0:
-                time_since_reset = time.time() - self.last_reset_time
-                scroll_pos = getattr(self.scroll_helper, 'scroll_position', 'unknown')
-                has_scrolling_image = hasattr(self.scroll_helper, 'cached_image') and self.scroll_helper.cached_image is not None
-                cycle_complete = self.is_cycle_complete()
-
-                self.logger.info(
-                    f"[DIAGNOSTIC] Display call #{self.total_display_calls} | "
-                    f"Calls since reset: {self.display_calls_since_reset} | "
-                    f"Time since reset: {time_since_reset:.1f}s | "
-                    f"Scroll pos: {scroll_pos} | "
-                    f"Has scrolling image: {has_scrolling_image} | "
-                    f"Cycle complete: {cycle_complete} | "
-                    f"Games data: {len(self.games_data)}"
-                )
+            # Record position before update for wrap detection
+            old_pos = self.scroll_helper.scroll_position
 
             # Update scroll position
             self.scroll_helper.update_scroll_position()
 
-            # Check if a cycle just completed
-            if self.is_cycle_complete() and not self.completed_cycle_since_update:
-                self.completed_cycle_since_update = True
-                self.logger.info("Scroll cycle completed - ready for data update on next update() call")
+            # Detect wrap-around (position jumped backward significantly)
+            new_pos = self.scroll_helper.scroll_position
+            wrapped = (old_pos - new_pos) > self.scroll_helper.display_width
 
-            # If cycle has been complete for a while, reset to avoid frozen frame
-            # Give display_controller ~1s to detect completion, then reset to continue looping
-            if self.is_cycle_complete() and self.display_calls_since_reset > 100:
-                # Only reset if we're not about to fetch new data (check time since update)
-                current_time = time.time()
-                time_since_update = current_time - self.last_data_update
-                update_interval = self.config.get('data_settings', {}).get('update_interval', 60)
+            if wrapped:
+                self.logger.info(
+                    "Scroll wrap detected (%.0f -> %.0f)", old_pos, new_pos
+                )
 
-                # If we're close to the update interval, let update() handle the reset
-                # Otherwise, reset now to continue looping
-                if time_since_update < (update_interval - 5):
-                    self.logger.info(f"Cycle complete for {self.display_calls_since_reset} calls - resetting scroll to continue looping")
-                    self.reset_cycle_state()
+                # Check for pending data from background fetch
+                with self._fetch_lock:
+                    if self._pending_data_ready:
+                        self.games_data = self._pending_games_data
+                        self._pending_games_data = None
+                        self._pending_data_ready = False
+
+                        # Re-render with new data (resets scroll to position 0)
+                        self._render_scrolling_content()
+                        self.logger.info(
+                            "Applied pending data update (%d games)",
+                            len(self.games_data)
+                        )
+                    else:
+                        # No pending data - reset tracking for next cycle
+                        self.scroll_helper.scroll_complete = False
+                        self.scroll_helper.total_distance_scrolled = 0.0
 
             # Get visible portion of scrolling image
             visible_image = self.scroll_helper.get_visible_portion()
 
             if visible_image is None:
-                self.logger.warning(
-                    f"ScrollHelper returned None for visible portion | "
-                    f"Calls since reset: {self.display_calls_since_reset} | "
-                    f"Has scrolling image: {hasattr(self.scroll_helper, 'cached_image') and self.scroll_helper.cached_image is not None}"
-                )
-                return
+                return False
 
             # Display the visible portion
             if visible_image:
-                # Ensure display_manager.image exists
                 matrix_width = self.display_manager.width
                 matrix_height = self.display_manager.height
 
                 if not hasattr(self.display_manager, 'image') or self.display_manager.image is None:
-                    self.display_manager.image = Image.new('RGB', (matrix_width, matrix_height), (0, 0, 0))
+                    self.display_manager.image = Image.new(
+                        'RGB', (matrix_width, matrix_height), (0, 0, 0)
+                    )
                 elif self.display_manager.image.size != (matrix_width, matrix_height):
-                    self.display_manager.image = Image.new('RGB', (matrix_width, matrix_height), (0, 0, 0))
+                    self.display_manager.image = Image.new(
+                        'RGB', (matrix_width, matrix_height), (0, 0, 0)
+                    )
 
-                # Verify visible_image size matches display
                 if visible_image.size == (matrix_width, matrix_height):
                     self.display_manager.image.paste(visible_image, (0, 0))
                 else:
-                    # Resize if needed (shouldn't happen, but safety check)
-                    self.logger.warning(
-                        f"Visible image size {visible_image.size} doesn't match display ({matrix_width}, {matrix_height})"
+                    visible_image = visible_image.resize(
+                        (matrix_width, matrix_height), Image.Resampling.LANCZOS
                     )
-                    visible_image = visible_image.resize((matrix_width, matrix_height), Image.Resampling.LANCZOS)
                     self.display_manager.image.paste(visible_image, (0, 0))
 
                 self.display_manager.update_display()
-            else:
-                # visible_image is falsy (empty image?)
-                self.logger.warning(
-                    f"Visible image is falsy but not None | "
-                    f"Type: {type(visible_image)} | "
-                    f"Calls since reset: {self.display_calls_since_reset}"
-                )
+                return True
+
+            return False
 
         except Exception as e:
             self.logger.error(f"Error displaying player stats: {e}", exc_info=True)
+            return False
 
     def supports_dynamic_duration(self):
         """Enable dynamic duration based on content width."""
         return True
 
     def is_cycle_complete(self):
-        """Check if scroll cycle is complete."""
-        # Don't report complete until we've had at least 10 display calls after reset
-        # This prevents false positives right after reset and gives scroll time to start
-        if self.display_calls_since_reset < 10:
-            return False
+        """
+        Always returns False for continuous scrolling mode.
 
-        return self.scroll_helper.is_scroll_complete()
+        The plugin manages scroll cycles internally via wrap detection.
+        The display controller uses target_duration to manage display time.
+        """
+        return False
+
+    def has_live_content(self):
+        """Check if there are live games to display."""
+        return bool(self.games_data)
+
+    def has_live_priority(self):
+        """Keep display on this plugin while live games are active."""
+        return bool(self.games_data)
 
     def reset_cycle_state(self):
-        """Reset scroll cycle state."""
-        self.logger.info(f"[RESET] Resetting scroll cycle (total display calls: {self.total_display_calls})")
-        self.scroll_helper.reset_scroll()
-        self.last_reset_time = time.time()  # Record reset time
-        self.display_calls_since_reset = 0  # Reset display call counter
+        """
+        Reset scroll cycle state.
 
-        # Log post-reset state
-        has_scrolling_image = hasattr(self.scroll_helper, 'cached_image') and self.scroll_helper.cached_image is not None
-        scroll_pos = getattr(self.scroll_helper, 'scroll_position', 'unknown')
-        self.logger.info(
-            f"[RESET] Post-reset state: "
-            f"Has scrolling image: {has_scrolling_image} | "
-            f"Scroll position: {scroll_pos}"
-        )
+        Called by display controller on mode switches.
+        Performs a full scroll reset for clean start on new mode entry.
+        """
+        self.logger.info("Resetting scroll cycle state (mode switch)")
+        self.scroll_helper.reset_scroll()
 
     def get_display_duration(self):
         """Get dynamic display duration based on scroll content."""
