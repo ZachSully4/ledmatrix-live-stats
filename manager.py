@@ -313,6 +313,20 @@ class LivePlayerStatsPlugin(BasePlugin):
                 self.completed_cycle_since_update = True
                 self.logger.info("Scroll cycle completed - ready for data update on next update() call")
 
+            # If cycle has been complete for a while, reset to avoid frozen frame
+            # Give display_controller ~1s to detect completion, then reset to continue looping
+            if self.is_cycle_complete() and self.display_calls_since_reset > 100:
+                # Only reset if we're not about to fetch new data (check time since update)
+                current_time = time.time()
+                time_since_update = current_time - self.last_data_update
+                update_interval = self.config.get('data_settings', {}).get('update_interval', 60)
+
+                # If we're close to the update interval, let update() handle the reset
+                # Otherwise, reset now to continue looping
+                if time_since_update < (update_interval - 5):
+                    self.logger.info(f"Cycle complete for {self.display_calls_since_reset} calls - resetting scroll to continue looping")
+                    self.reset_cycle_state()
+
             # Get visible portion of scrolling image
             visible_image = self.scroll_helper.get_visible_portion()
 
