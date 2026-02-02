@@ -1,0 +1,2 @@
+# LivePlayerStats plugin uses core LEDMatrix dependencies
+# No additional requirements needed

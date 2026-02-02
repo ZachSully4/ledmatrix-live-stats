@@ -1,0 +1,17 @@
+{
+  "id": "live-player-stats",
+  "name": "Live Player Stats",
+  "version": "1.0.0",
+  "author": "LEDMatrix User",
+  "description": "Displays live player statistics for NBA, NFL, NCAAM, and NCAAF games",
+  "category": "sports",
+  "tags": ["sports", "stats", "nba", "nfl", "ncaa", "scrolling"],
+  "entry_point": "manager.py",
+  "class_name": "LivePlayerStatsPlugin",
+  "display_modes": ["live-player-stats"],
+  "config_schema": "config_schema.json",
+  "compatible_versions": [">=2.0.0"],
+  "dependencies": {
+    "managers": []
+  }
+}
