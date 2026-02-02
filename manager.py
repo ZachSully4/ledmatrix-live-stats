@@ -328,7 +328,15 @@ class LivePlayerStatsPlugin(BasePlugin):
 
     def is_cycle_complete(self):
         """Check if scroll cycle is complete."""
-        return self.scroll_helper.is_scroll_complete()
+        # Only report complete if scroll is actually done AND position is near the end
+        # This prevents false positives right after reset
+        if not self.scroll_helper.is_scroll_complete():
+            return False
+
+        # Additional check: verify scroll position is actually at the end
+        # If position is 0 or very small, we just reset and shouldn't report complete
+        scroll_pos = getattr(self.scroll_helper, 'scroll_position', 0)
+        return scroll_pos > 10  # Only complete if we've scrolled at least 10 pixels
 
     def reset_cycle_state(self):
         """Reset scroll cycle state."""
