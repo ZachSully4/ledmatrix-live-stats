@@ -78,9 +78,6 @@ class LivePlayerStatsPlugin(BasePlugin):
         self.scroll_helper.set_scroll_delay(display_opts.get('scroll_delay', 0.02))
         self.scroll_helper.set_target_fps(display_opts.get('target_fps', 120))
 
-        # Enable continuous scrolling (no freeze/clamp at end of cycle)
-        self.scroll_helper.continuous_mode = True
-
         # Build league rotation order
         self.league_rotation_order = self._build_rotation_order()
         self.current_league_index = 0
@@ -353,10 +350,13 @@ class LivePlayerStatsPlugin(BasePlugin):
                             "Applied pending data update (%d games)",
                             len(self.games_data)
                         )
-                    else:
-                        # No pending data - reset tracking for next cycle
-                        self.scroll_helper.scroll_complete = False
-                        self.scroll_helper.total_distance_scrolled = 0.0
+
+                # Always reset distance tracking at wrap to prevent scroll_helper
+                # from reaching its completion threshold and clamping the position.
+                # The wrap fires display_width pixels before completion would trigger,
+                # so resetting here keeps the scroll looping indefinitely.
+                self.scroll_helper.scroll_complete = False
+                self.scroll_helper.total_distance_scrolled = 0.0
 
             # Get visible portion of scrolling image
             visible_image = self.scroll_helper.get_visible_portion()
