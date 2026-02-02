@@ -87,6 +87,7 @@ class LivePlayerStatsPlugin(BasePlugin):
         self.needs_initial_update = True  # Flag for first update
         self.completed_cycle_since_update = False  # Track if at least one cycle completed since last data update
         self.last_reset_time = 0  # Track when scroll was last reset
+        self.display_calls_since_reset = 0  # Track display calls after reset
 
         # Enable high FPS scrolling mode
         self.enable_scrolling = True
@@ -272,6 +273,9 @@ class LivePlayerStatsPlugin(BasePlugin):
             if force_clear:
                 self.display_manager.clear()
 
+            # Increment display call counter (used to prevent premature cycle completion)
+            self.display_calls_since_reset += 1
+
             # Update scroll position
             self.scroll_helper.update_scroll_position()
 
@@ -329,10 +333,9 @@ class LivePlayerStatsPlugin(BasePlugin):
 
     def is_cycle_complete(self):
         """Check if scroll cycle is complete."""
-        # Don't report complete if we just reset (within last 2 seconds)
-        # This prevents false positives right after reset
-        time_since_reset = time.time() - self.last_reset_time
-        if time_since_reset < 2.0:
+        # Don't report complete until we've had at least 10 display calls after reset
+        # This prevents false positives right after reset and gives scroll time to start
+        if self.display_calls_since_reset < 10:
             return False
 
         return self.scroll_helper.is_scroll_complete()
@@ -341,6 +344,7 @@ class LivePlayerStatsPlugin(BasePlugin):
         """Reset scroll cycle state."""
         self.scroll_helper.reset_scroll()
         self.last_reset_time = time.time()  # Record reset time
+        self.display_calls_since_reset = 0  # Reset display call counter
 
     def get_display_duration(self):
         """Get dynamic display duration based on scroll content."""
