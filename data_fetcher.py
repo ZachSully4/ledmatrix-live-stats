@@ -169,6 +169,24 @@ class DataFetcher:
                 is_favorite = home_abbr.upper() in [t.upper() for t in favorite_teams] or \
                              away_abbr.upper() in [t.upper() for t in favorite_teams]
 
+            # Format period indicator based on league
+            period = status.get('period', 0)
+            if league_key in ['nba', 'nfl']:
+                # NBA/NFL: Q1, Q2, Q3, Q4
+                period_indicator = f"Q{period}" if period > 0 else ""
+            elif league_key in ['ncaam', 'ncaaf']:
+                # NCAA: 1st Half, 2nd Half
+                if period == 1:
+                    period_indicator = "1st Half"
+                elif period == 2:
+                    period_indicator = "2nd Half"
+                elif period > 2:
+                    period_indicator = f"OT{period-2}" if period > 2 else "OT"
+                else:
+                    period_indicator = ""
+            else:
+                period_indicator = f"P{period}" if period > 0 else ""
+
             game_data = {
                 'id': game_id,
                 'league': league_key,
@@ -176,9 +194,9 @@ class DataFetcher:
                 'away_abbr': away_abbr,
                 'home_score': int(home_team.get('score', 0)),
                 'away_score': int(away_team.get('score', 0)),
-                'period': status.get('period', 0),
+                'period': period,
                 'clock': status.get('displayClock', ''),
-                'period_text': status.get('type', {}).get('shortDetail', ''),
+                'period_text': period_indicator,
                 'is_favorite': is_favorite,
                 'expanded_stats': is_favorite and favorite_team_expanded_stats,
             }
@@ -789,7 +807,7 @@ class DataFetcher:
                 'away_score': int(away.get('score', 0)),
                 'period': 0,  # NCAA API uses currentPeriod text
                 'clock': game.get('contestClock', ''),
-                'period_text': game.get('currentPeriod', ''),
+                'period_text': game.get('currentPeriod', ''),  # NCAA provides formatted period text like "1st Half"
                 'is_favorite': is_favorite,
                 'expanded_stats': is_favorite and expanded_stats,
             }
