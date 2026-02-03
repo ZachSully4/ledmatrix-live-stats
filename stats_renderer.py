@@ -355,8 +355,8 @@ class StatsRenderer:
                         max_number_width = max(max_number_width, number_w)
 
             # Calculate total width for this stat category
-            # Width = label + padding + (name + number + gap) * max_players + padding
-            stat_width = label_width + 4 + (max_name_width + max_number_width + 16) * max(max_players, 1) + 4
+            # Width = label + padding + (number + 12px num-name gap + name + 16px player gap) * players + padding
+            stat_width = label_width + 4 + (max_name_width + max_number_width + 28) * max(max_players, 1) + 4
 
             stat_layouts[stat_name] = {
                 'width': max(stat_width, 40),  # Minimum 40px per stat
@@ -416,15 +416,15 @@ class StatsRenderer:
                     number_text = str(value)
                     draw.text((player_x, 3), number_text, font=self.number_font, fill=COLOR_GOLD)
 
-                    # Draw names after number with spacing
+                    # Draw names after number (12px gap)
                     number_width = layout['number_width']
                     name_x = player_x + number_width + 12
                     draw.text((name_x, 2), first_name, font=self.small_font, fill=COLOR_WHITE)
                     draw.text((name_x, 10), last_name, font=self.small_font, fill=COLOR_WHITE)
 
-                    # Move to next player
+                    # Move to next player (16px visible gap after name)
                     name_width = layout['name_width']
-                    player_x += number_width + name_width + 16
+                    player_x += number_width + 12 + name_width + 16
 
             # Draw home team players (y=18 first names, y=26 last names)
             if home_leaders and stat_name in home_leaders:
@@ -442,15 +442,15 @@ class StatsRenderer:
                     number_text = str(value)
                     draw.text((player_x, 19), number_text, font=self.number_font, fill=COLOR_GOLD)
 
-                    # Draw names after number with spacing
+                    # Draw names after number (12px gap)
                     number_width = layout['number_width']
                     name_x = player_x + number_width + 12
                     draw.text((name_x, 18), first_name, font=self.small_font, fill=COLOR_WHITE)
                     draw.text((name_x, 26), last_name, font=self.small_font, fill=COLOR_WHITE)
 
-                    # Move to next player
+                    # Move to next player (16px visible gap after name)
                     name_width = layout['name_width']
-                    player_x += number_width + name_width + 16
+                    player_x += number_width + 12 + name_width + 16
 
             # Move to next stat category with extra spacing
             x_pos += stat_width + 8  # Add 8px gap between categories
