@@ -88,13 +88,19 @@ class DataFetcher:
                 self.logger.debug(f"No scoreboard data for {league_key}")
                 return []
 
-            # NFL: if today's scoreboard has no events, fetch next 7 days
-            if not scoreboard.get('events') and league_key == 'nfl':
+            # Process events from scoreboard
+            live_games, upcoming_event = self._process_nfl_events(
+                scoreboard.get('events', []), league_key, max_games,
+                favorite_teams, favorite_team_expanded_stats
+            )
+
+            # NFL: if nothing usable found today, fetch next 7 days
+            if not live_games and not upcoming_event and league_key == 'nfl':
                 today = datetime.now()
                 end_date = today + timedelta(days=7)
                 date_range = f"{today.strftime('%Y%m%d')}-{end_date.strftime('%Y%m%d')}"
                 range_cache_key = f"live_stats_{league_key}_{date_range}"
-                self.logger.info(f"No NFL games today, fetching next 7 days: {date_range}")
+                self.logger.info(f"No usable NFL games today, fetching next 7 days: {date_range}")
 
                 scoreboard = self.api_helper.fetch_espn_scoreboard(
                     sport=sport,
@@ -104,53 +110,11 @@ class DataFetcher:
                     cache_ttl=300
                 )
 
-                if not scoreboard or 'events' not in scoreboard:
-                    self.logger.debug("No NFL games found in next 7 days either")
-                    return []
-
-            # Extract live games
-            live_games = []
-            upcoming_event = None
-            total_events = len(scoreboard.get('events', []))
-            self.logger.debug(f"Processing {total_events} total events for {league_key}")
-
-            for event in scoreboard.get('events', []):
-                # Stop if we've reached max games
-                if len(live_games) >= max_games:
-                    self.logger.info(f"Reached max_games limit ({max_games}) for {league_key}")
-                    break
-
-                # Only process games that are live (in progress)
-                status_state = event.get('status', {}).get('type', {}).get('state')
-                status_detail = event.get('status', {}).get('type', {}).get('detail', '')
-
-                # Log game status for debugging
-                comp = event.get('competitions', [{}])[0]
-                comps = comp.get('competitors', [])
-                if len(comps) >= 2:
-                    away = comps[0].get('team', {}).get('abbreviation', '?')
-                    home = comps[1].get('team', {}).get('abbreviation', '?')
-                    self.logger.info(f"Game: {away} @ {home}, Status: {status_state} ({status_detail})")
-
-                if status_state == 'in':
-                    # Parse live game
-                    game_info = self._parse_game_event(event, league_key, favorite_teams, favorite_team_expanded_stats)
-                    if game_info:
-                        live_games.append(game_info)
-                        self.logger.info(f"Parsed live game: {game_info.get('away_abbr')} @ {game_info.get('home_abbr')}, "
-                                       f"home_leaders: {bool(game_info.get('home_leaders'))}, "
-                                       f"away_leaders: {bool(game_info.get('away_leaders'))}")
-                elif status_state == 'pre' and upcoming_event is None and league_key == 'nfl':
-                    # Track first upcoming NFL game as fallback (skip Pro Bowl / all-star games)
-                    comps_check = comp.get('competitors', [])
-                    is_allstar = False
-                    for c in comps_check:
-                        abbr = c.get('team', {}).get('abbreviation', '')
-                        if abbr in ('AFC', 'NFC'):
-                            is_allstar = True
-                            break
-                    if not is_allstar:
-                        upcoming_event = event
+                if scoreboard and 'events' in scoreboard:
+                    live_games, upcoming_event = self._process_nfl_events(
+                        scoreboard.get('events', []), league_key, max_games,
+                        favorite_teams, favorite_team_expanded_stats
+                    )
 
             # NFL: if no live games, include the next upcoming game with placeholder stats
             if not live_games and upcoming_event and league_key == 'nfl':
@@ -160,12 +124,65 @@ class DataFetcher:
                     live_games.append(game_info)
                     self.logger.info(f"Added upcoming NFL game: {game_info.get('away_abbr')} @ {game_info.get('home_abbr')}")
 
-            self.logger.info(f"Found {len(live_games)} games in {league_key} (out of {total_events} total, max={max_games})")
+            self.logger.info(f"Found {len(live_games)} games in {league_key} (max={max_games})")
             return live_games
 
         except Exception as e:
             self.logger.error(f"Error fetching live games for {league_key}: {e}", exc_info=True)
             return []
+
+    def _process_nfl_events(self, events: list, league_key: str, max_games: int,
+                            favorite_teams: List[str], favorite_team_expanded_stats: bool):
+        """
+        Process ESPN events to find live games and upcoming events.
+
+        Args:
+            events: List of ESPN event dicts
+            league_key: League identifier
+            max_games: Max games to return
+            favorite_teams: Favorite team abbreviations
+            favorite_team_expanded_stats: Show expanded stats for favorites
+
+        Returns:
+            Tuple of (live_games list, upcoming_event or None)
+        """
+        live_games = []
+        upcoming_event = None
+
+        self.logger.debug(f"Processing {len(events)} total events for {league_key}")
+
+        for event in events:
+            if len(live_games) >= max_games:
+                self.logger.info(f"Reached max_games limit ({max_games}) for {league_key}")
+                break
+
+            status_state = event.get('status', {}).get('type', {}).get('state')
+            status_detail = event.get('status', {}).get('type', {}).get('detail', '')
+
+            comp = event.get('competitions', [{}])[0]
+            comps = comp.get('competitors', [])
+            if len(comps) >= 2:
+                away = comps[0].get('team', {}).get('abbreviation', '?')
+                home = comps[1].get('team', {}).get('abbreviation', '?')
+                self.logger.info(f"Game: {away} @ {home}, Status: {status_state} ({status_detail})")
+
+            if status_state == 'in':
+                game_info = self._parse_game_event(event, league_key, favorite_teams, favorite_team_expanded_stats)
+                if game_info:
+                    live_games.append(game_info)
+                    self.logger.info(f"Parsed live game: {game_info.get('away_abbr')} @ {game_info.get('home_abbr')}")
+            elif status_state == 'pre' and upcoming_event is None and league_key == 'nfl':
+                # Skip Pro Bowl / all-star games
+                is_allstar = False
+                for c in comps:
+                    abbr = c.get('team', {}).get('abbreviation', '')
+                    if abbr in ('AFC', 'NFC'):
+                        is_allstar = True
+                        break
+                if not is_allstar:
+                    upcoming_event = event
+
+        return live_games, upcoming_event
 
     def _parse_game_event(self, event: Dict, league_key: str, favorite_teams: List[str] = None,
                          favorite_team_expanded_stats: bool = True, is_upcoming: bool = False) -> Optional[Dict]:
