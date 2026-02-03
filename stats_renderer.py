@@ -513,12 +513,14 @@ class StatsRenderer:
 
     def _render_nfl_team_stats(self, leaders: Optional[Dict]) -> Image.Image:
         """
-        Render one NFL team's stats panel using full 32px height with 3 rows.
+        Render one NFL team's stats as horizontal sections using full 32px height.
 
-        Layout:
-            Row 0 (y=2):  QB:   Smith 215YDS
-            Row 1 (y=12): RUSH: 142YDS  Walker 87YDS 1TD
-            Row 2 (y=22): REC:  215YDS  Metcalf 68YDS 2TD
+        Each stat category (QB, RUSH, REC) gets its own section with 3 vertical lines:
+            Line 1 (y=2):  Label (+ team total for RUSH/REC)
+            Line 2 (y=12): Full player name
+            Line 3 (y=22): Player yards (+ TDs if > 0)
+
+        Sections are separated by 16px gaps and concatenated horizontally.
 
         Args:
             leaders: Dict with PASS/RUSH/REC data in richer format
@@ -527,7 +529,7 @@ class StatsRenderer:
             PIL Image of the stats panel
         """
         height = self.display_height
-        row_y = [2, 12, 22]
+        section_gap = 16
 
         if not leaders:
             panel = Image.new('RGB', (100, height), color=COLOR_BLACK)
@@ -535,92 +537,122 @@ class StatsRenderer:
             draw.text((2, 12), "No stats", font=self.small_font, fill=COLOR_GRAY)
             return panel
 
-        # Build text elements for each row to calculate width
         temp_draw = ImageDraw.Draw(Image.new('RGB', (1, 1)))
-        rows = []
+        sections = []
 
-        # Row 0: QB line
+        # --- QB Section ---
         pass_data = leaders.get('PASS', {})
-        qb_label = "QB:"
         qb_name = pass_data.get('leader_name', 'TBD')
-        # Use last name only
-        qb_parts = qb_name.split()
-        qb_last = qb_parts[-1] if len(qb_parts) > 1 else qb_name
         qb_yards = str(pass_data.get('leader_yards', 0))
-        rows.append({'label': qb_label, 'segments': [
-            {'text': qb_last, 'font': self.small_font, 'color': COLOR_WHITE},
-            {'text': ' ', 'font': self.small_font, 'color': COLOR_WHITE},
-            {'text': f"{qb_yards}YDS", 'font': self.stat_label_font, 'color': COLOR_GOLD},
-        ]})
 
-        # Row 1: RUSH line
+        # Line 1: "QB:"
+        # Line 2: full name
+        # Line 3: yards
+        qb_line1 = "QB:"
+        qb_line2 = qb_name
+        qb_line3 = f"{qb_yards}YDS"
+
+        qb_w1 = int(temp_draw.textlength(qb_line1, font=self.stat_label_font))
+        qb_w2 = int(temp_draw.textlength(qb_line2, font=self.small_font))
+        qb_w3 = int(temp_draw.textlength(qb_line3, font=self.stat_label_font))
+        qb_width = max(qb_w1, qb_w2, qb_w3) + 4
+
+        qb_panel = Image.new('RGB', (qb_width, height), color=COLOR_BLACK)
+        qb_draw = ImageDraw.Draw(qb_panel)
+        qb_draw.text((2, 2), qb_line1, font=self.stat_label_font, fill=COLOR_LIGHT_BLUE)
+        qb_draw.text((2, 12), qb_line2, font=self.small_font, fill=COLOR_WHITE)
+        qb_draw.text((2, 22), qb_line3, font=self.stat_label_font, fill=COLOR_GOLD)
+        sections.append(qb_panel)
+
+        # --- RUSH Section ---
         rush_data = leaders.get('RUSH', {})
-        rush_label = "RUSH:"
         rush_total = str(rush_data.get('team_total_yards', 0))
         rush_name = rush_data.get('leader_name', 'TBD')
-        rush_parts = rush_name.split()
-        rush_last = rush_parts[-1] if len(rush_parts) > 1 else rush_name
         rush_yards = str(rush_data.get('leader_yards', 0))
         rush_tds = rush_data.get('leader_tds', 0)
-        rush_segments = [
-            {'text': f"{rush_total}YDS", 'font': self.stat_label_font, 'color': COLOR_GOLD},
-            {'text': '  ', 'font': self.small_font, 'color': COLOR_WHITE},
-            {'text': rush_last, 'font': self.small_font, 'color': COLOR_WHITE},
-            {'text': ' ', 'font': self.small_font, 'color': COLOR_WHITE},
-            {'text': f"{rush_yards}YDS", 'font': self.stat_label_font, 'color': COLOR_GOLD},
+
+        # Line 1: "RUSH:" + team total
+        rush_line1_parts = [
+            ("RUSH: ", self.stat_label_font, COLOR_LIGHT_BLUE),
+            (f"{rush_total}YDS", self.stat_label_font, COLOR_GOLD),
+        ]
+        # Line 2: full name
+        rush_line2 = rush_name
+        # Line 3: player yards + TDs
+        rush_line3_parts = [
+            (f"{rush_yards}YDS", self.stat_label_font, COLOR_GOLD),
         ]
         if rush_tds > 0:
-            rush_segments.append({'text': ' ', 'font': self.small_font, 'color': COLOR_WHITE})
-            rush_segments.append({'text': f"{rush_tds}TD", 'font': self.stat_label_font, 'color': COLOR_GOLD})
-        rows.append({'label': rush_label, 'segments': rush_segments})
+            rush_line3_parts.append((" ", self.small_font, COLOR_WHITE))
+            rush_line3_parts.append((f"{rush_tds}TD", self.stat_label_font, COLOR_GOLD))
 
-        # Row 2: REC line
+        rush_w1 = sum(int(temp_draw.textlength(t, font=f)) for t, f, _ in rush_line1_parts)
+        rush_w2 = int(temp_draw.textlength(rush_line2, font=self.small_font))
+        rush_w3 = sum(int(temp_draw.textlength(t, font=f)) for t, f, _ in rush_line3_parts)
+        rush_width = max(rush_w1, rush_w2, rush_w3) + 4
+
+        rush_panel = Image.new('RGB', (rush_width, height), color=COLOR_BLACK)
+        rush_draw = ImageDraw.Draw(rush_panel)
+        x = 2
+        for text, font, color in rush_line1_parts:
+            rush_draw.text((x, 2), text, font=font, fill=color)
+            x += int(rush_draw.textlength(text, font=font))
+        rush_draw.text((2, 12), rush_line2, font=self.small_font, fill=COLOR_WHITE)
+        x = 2
+        for text, font, color in rush_line3_parts:
+            rush_draw.text((x, 22), text, font=font, fill=color)
+            x += int(rush_draw.textlength(text, font=font))
+        sections.append(rush_panel)
+
+        # --- REC Section ---
         rec_data = leaders.get('REC', {})
-        rec_label = "REC:"
         rec_total = str(rec_data.get('team_total_yards', 0))
         rec_name = rec_data.get('leader_name', 'TBD')
-        rec_parts = rec_name.split()
-        rec_last = rec_parts[-1] if len(rec_parts) > 1 else rec_name
         rec_yards = str(rec_data.get('leader_yards', 0))
         rec_tds = rec_data.get('leader_tds', 0)
-        rec_segments = [
-            {'text': f"{rec_total}YDS", 'font': self.stat_label_font, 'color': COLOR_GOLD},
-            {'text': '  ', 'font': self.small_font, 'color': COLOR_WHITE},
-            {'text': rec_last, 'font': self.small_font, 'color': COLOR_WHITE},
-            {'text': ' ', 'font': self.small_font, 'color': COLOR_WHITE},
-            {'text': f"{rec_yards}YDS", 'font': self.stat_label_font, 'color': COLOR_GOLD},
+
+        # Line 1: "REC:" + team total
+        rec_line1_parts = [
+            ("REC: ", self.stat_label_font, COLOR_LIGHT_BLUE),
+            (f"{rec_total}YDS", self.stat_label_font, COLOR_GOLD),
+        ]
+        # Line 2: full name
+        rec_line2 = rec_name
+        # Line 3: player yards + TDs
+        rec_line3_parts = [
+            (f"{rec_yards}YDS", self.stat_label_font, COLOR_GOLD),
         ]
         if rec_tds > 0:
-            rec_segments.append({'text': ' ', 'font': self.small_font, 'color': COLOR_WHITE})
-            rec_segments.append({'text': f"{rec_tds}TD", 'font': self.stat_label_font, 'color': COLOR_GOLD})
-        rows.append({'label': rec_label, 'segments': rec_segments})
+            rec_line3_parts.append((" ", self.small_font, COLOR_WHITE))
+            rec_line3_parts.append((f"{rec_tds}TD", self.stat_label_font, COLOR_GOLD))
 
-        # Calculate max width needed
-        max_width = 0
-        label_gap = 4  # gap after label
-        for row in rows:
-            label_w = int(temp_draw.textlength(row['label'], font=self.stat_label_font))
-            content_w = sum(int(temp_draw.textlength(seg['text'], font=seg['font'])) for seg in row['segments'])
-            total_w = label_w + label_gap + content_w
-            max_width = max(max_width, total_w)
+        rec_w1 = sum(int(temp_draw.textlength(t, font=f)) for t, f, _ in rec_line1_parts)
+        rec_w2 = int(temp_draw.textlength(rec_line2, font=self.small_font))
+        rec_w3 = sum(int(temp_draw.textlength(t, font=f)) for t, f, _ in rec_line3_parts)
+        rec_width = max(rec_w1, rec_w2, rec_w3) + 4
 
-        panel_width = max_width + 8  # padding
-        panel = Image.new('RGB', (panel_width, height), color=COLOR_BLACK)
-        draw = ImageDraw.Draw(panel)
+        rec_panel = Image.new('RGB', (rec_width, height), color=COLOR_BLACK)
+        rec_draw = ImageDraw.Draw(rec_panel)
+        x = 2
+        for text, font, color in rec_line1_parts:
+            rec_draw.text((x, 2), text, font=font, fill=color)
+            x += int(rec_draw.textlength(text, font=font))
+        rec_draw.text((2, 12), rec_line2, font=self.small_font, fill=COLOR_WHITE)
+        x = 2
+        for text, font, color in rec_line3_parts:
+            rec_draw.text((x, 22), text, font=font, fill=color)
+            x += int(rec_draw.textlength(text, font=font))
+        sections.append(rec_panel)
 
-        # Draw each row
-        for i, row in enumerate(rows):
-            y = row_y[i]
-            x = 2
-
-            # Draw label in light blue
-            draw.text((x, y), row['label'], font=self.stat_label_font, fill=COLOR_LIGHT_BLUE)
-            x += int(draw.textlength(row['label'], font=self.stat_label_font)) + label_gap
-
-            # Draw each segment
-            for seg in row['segments']:
-                draw.text((x, y), seg['text'], font=seg['font'], fill=seg['color'])
-                x += int(draw.textlength(seg['text'], font=seg['font']))
+        # Concatenate sections horizontally with gaps
+        total_width = sum(s.width for s in sections) + section_gap * (len(sections) - 1)
+        panel = Image.new('RGB', (total_width, height), color=COLOR_BLACK)
+        current_x = 0
+        for i, section in enumerate(sections):
+            panel.paste(section, (current_x, 0))
+            current_x += section.width
+            if i < len(sections) - 1:
+                current_x += section_gap
 
         return panel
 
