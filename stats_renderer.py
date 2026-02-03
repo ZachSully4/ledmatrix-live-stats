@@ -511,14 +511,53 @@ class StatsRenderer:
 
         return panel
 
+    def _render_nfl_section(self, title: str, title_color, value_parts: list) -> Image.Image:
+        """
+        Render a single NFL stat section with title on top and value below.
+
+        Uses larger fonts since each section only has 2 lines on 32px height.
+
+        Args:
+            title: Title text (top line)
+            title_color: Color tuple for the title
+            value_parts: List of (text, font, color) tuples for the value line
+
+        Returns:
+            PIL Image of this section
+        """
+        height = self.display_height
+        title_y = 4
+        value_y = 18
+        temp_draw = ImageDraw.Draw(Image.new('RGB', (1, 1)))
+
+        title_w = int(temp_draw.textlength(title, font=self.stat_label_font))
+        value_w = sum(int(temp_draw.textlength(t, font=f)) for t, f, _ in value_parts)
+        section_width = max(title_w, value_w) + 4
+
+        panel = Image.new('RGB', (section_width, height), color=COLOR_BLACK)
+        draw = ImageDraw.Draw(panel)
+
+        # Draw title
+        draw.text((2, title_y), title, font=self.stat_label_font, fill=title_color)
+
+        # Draw value segments
+        x = 2
+        for text, font, color in value_parts:
+            draw.text((x, value_y), text, font=font, fill=color)
+            x += int(draw.textlength(text, font=font))
+
+        return panel
+
     def _render_nfl_team_stats(self, leaders: Optional[Dict]) -> Image.Image:
         """
-        Render one NFL team's stats as horizontal sections using full 32px height.
+        Render one NFL team's stats as 5 horizontal sections, each 2 lines tall.
 
-        Each stat category (QB, RUSH, REC) gets its own section with 3 vertical lines:
-            Line 1 (y=2):  Label (+ team total for RUSH/REC)
-            Line 2 (y=12): Full player name
-            Line 3 (y=22): Player yards (+ TDs if > 0)
+        Sections (each uses full 32px with title on top, value below):
+            1. Passing Yards  / {yards}YDS
+            2. Total Rush Yards / {yards}YDS
+            3. {Rusher Name} / {yards}YDS {tds}TD
+            4. Receiving Yards / {yards}YDS
+            5. {Receiver Name} / {yards}YDS {tds}TD
 
         Sections are separated by 16px gaps and concatenated horizontally.
 
@@ -537,112 +576,62 @@ class StatsRenderer:
             draw.text((2, 12), "No stats", font=self.small_font, fill=COLOR_GRAY)
             return panel
 
-        temp_draw = ImageDraw.Draw(Image.new('RGB', (1, 1)))
         sections = []
 
-        # --- QB Section ---
+        # --- Section 1: Passing Yards ---
         pass_data = leaders.get('PASS', {})
-        qb_name = pass_data.get('leader_name', 'TBD')
-        qb_yards = str(pass_data.get('leader_yards', 0))
+        pass_yards = str(pass_data.get('leader_yards', 0))
+        pass_name = pass_data.get('leader_name', 'TBD')
+        sections.append(self._render_nfl_section(
+            "Passing Yards", COLOR_LIGHT_BLUE,
+            [(f"{pass_yards}YDS", self.number_font, COLOR_GOLD)],
+        ))
 
-        # Line 1: "QB:"
-        # Line 2: full name
-        # Line 3: yards
-        qb_line1 = "QB:"
-        qb_line2 = qb_name
-        qb_line3 = f"{qb_yards}YDS"
+        # --- Section 2: QB Name ---
+        sections.append(self._render_nfl_section(
+            pass_name, COLOR_WHITE,
+            [(f"{pass_yards}YDS", self.number_font, COLOR_GOLD)],
+        ))
 
-        qb_w1 = int(temp_draw.textlength(qb_line1, font=self.stat_label_font))
-        qb_w2 = int(temp_draw.textlength(qb_line2, font=self.small_font))
-        qb_w3 = int(temp_draw.textlength(qb_line3, font=self.stat_label_font))
-        qb_width = max(qb_w1, qb_w2, qb_w3) + 4
-
-        qb_panel = Image.new('RGB', (qb_width, height), color=COLOR_BLACK)
-        qb_draw = ImageDraw.Draw(qb_panel)
-        qb_draw.text((2, 2), qb_line1, font=self.stat_label_font, fill=COLOR_LIGHT_BLUE)
-        qb_draw.text((2, 12), qb_line2, font=self.small_font, fill=COLOR_WHITE)
-        qb_draw.text((2, 22), qb_line3, font=self.stat_label_font, fill=COLOR_GOLD)
-        sections.append(qb_panel)
-
-        # --- RUSH Section ---
+        # --- Section 3: Total Rush Yards ---
         rush_data = leaders.get('RUSH', {})
         rush_total = str(rush_data.get('team_total_yards', 0))
+        sections.append(self._render_nfl_section(
+            "Total Rush Yards", COLOR_LIGHT_BLUE,
+            [(f"{rush_total}YDS", self.number_font, COLOR_GOLD)],
+        ))
+
+        # --- Section 4: Rush Leader ---
         rush_name = rush_data.get('leader_name', 'TBD')
         rush_yards = str(rush_data.get('leader_yards', 0))
         rush_tds = rush_data.get('leader_tds', 0)
-
-        # Line 1: "RUSH:" + team total
-        rush_line1_parts = [
-            ("RUSH: ", self.stat_label_font, COLOR_LIGHT_BLUE),
-            (f"{rush_total}YDS", self.stat_label_font, COLOR_GOLD),
-        ]
-        # Line 2: full name
-        rush_line2 = rush_name
-        # Line 3: player yards + TDs
-        rush_line3_parts = [
-            (f"{rush_yards}YDS", self.stat_label_font, COLOR_GOLD),
-        ]
+        rush_value = [(f"{rush_yards}YDS", self.number_font, COLOR_GOLD)]
         if rush_tds > 0:
-            rush_line3_parts.append((" ", self.small_font, COLOR_WHITE))
-            rush_line3_parts.append((f"{rush_tds}TD", self.stat_label_font, COLOR_GOLD))
+            rush_value.append((" ", self.stat_label_font, COLOR_WHITE))
+            rush_value.append((f"{rush_tds}TD", self.number_font, COLOR_GOLD))
+        sections.append(self._render_nfl_section(
+            rush_name, COLOR_WHITE, rush_value,
+        ))
 
-        rush_w1 = sum(int(temp_draw.textlength(t, font=f)) for t, f, _ in rush_line1_parts)
-        rush_w2 = int(temp_draw.textlength(rush_line2, font=self.small_font))
-        rush_w3 = sum(int(temp_draw.textlength(t, font=f)) for t, f, _ in rush_line3_parts)
-        rush_width = max(rush_w1, rush_w2, rush_w3) + 4
-
-        rush_panel = Image.new('RGB', (rush_width, height), color=COLOR_BLACK)
-        rush_draw = ImageDraw.Draw(rush_panel)
-        x = 2
-        for text, font, color in rush_line1_parts:
-            rush_draw.text((x, 2), text, font=font, fill=color)
-            x += int(rush_draw.textlength(text, font=font))
-        rush_draw.text((2, 12), rush_line2, font=self.small_font, fill=COLOR_WHITE)
-        x = 2
-        for text, font, color in rush_line3_parts:
-            rush_draw.text((x, 22), text, font=font, fill=color)
-            x += int(rush_draw.textlength(text, font=font))
-        sections.append(rush_panel)
-
-        # --- REC Section ---
+        # --- Section 5: Receiving Yards ---
         rec_data = leaders.get('REC', {})
         rec_total = str(rec_data.get('team_total_yards', 0))
+        sections.append(self._render_nfl_section(
+            "Receiving Yards", COLOR_LIGHT_BLUE,
+            [(f"{rec_total}YDS", self.number_font, COLOR_GOLD)],
+        ))
+
+        # --- Section 6: Rec Leader ---
         rec_name = rec_data.get('leader_name', 'TBD')
         rec_yards = str(rec_data.get('leader_yards', 0))
         rec_tds = rec_data.get('leader_tds', 0)
-
-        # Line 1: "REC:" + team total
-        rec_line1_parts = [
-            ("REC: ", self.stat_label_font, COLOR_LIGHT_BLUE),
-            (f"{rec_total}YDS", self.stat_label_font, COLOR_GOLD),
-        ]
-        # Line 2: full name
-        rec_line2 = rec_name
-        # Line 3: player yards + TDs
-        rec_line3_parts = [
-            (f"{rec_yards}YDS", self.stat_label_font, COLOR_GOLD),
-        ]
+        rec_value = [(f"{rec_yards}YDS", self.number_font, COLOR_GOLD)]
         if rec_tds > 0:
-            rec_line3_parts.append((" ", self.small_font, COLOR_WHITE))
-            rec_line3_parts.append((f"{rec_tds}TD", self.stat_label_font, COLOR_GOLD))
-
-        rec_w1 = sum(int(temp_draw.textlength(t, font=f)) for t, f, _ in rec_line1_parts)
-        rec_w2 = int(temp_draw.textlength(rec_line2, font=self.small_font))
-        rec_w3 = sum(int(temp_draw.textlength(t, font=f)) for t, f, _ in rec_line3_parts)
-        rec_width = max(rec_w1, rec_w2, rec_w3) + 4
-
-        rec_panel = Image.new('RGB', (rec_width, height), color=COLOR_BLACK)
-        rec_draw = ImageDraw.Draw(rec_panel)
-        x = 2
-        for text, font, color in rec_line1_parts:
-            rec_draw.text((x, 2), text, font=font, fill=color)
-            x += int(rec_draw.textlength(text, font=font))
-        rec_draw.text((2, 12), rec_line2, font=self.small_font, fill=COLOR_WHITE)
-        x = 2
-        for text, font, color in rec_line3_parts:
-            rec_draw.text((x, 22), text, font=font, fill=color)
-            x += int(rec_draw.textlength(text, font=font))
-        sections.append(rec_panel)
+            rec_value.append((" ", self.stat_label_font, COLOR_WHITE))
+            rec_value.append((f"{rec_tds}TD", self.number_font, COLOR_GOLD))
+        sections.append(self._render_nfl_section(
+            rec_name, COLOR_WHITE, rec_value,
+        ))
 
         # Concatenate sections horizontally with gaps
         total_width = sum(s.width for s in sections) + section_gap * (len(sections) - 1)
