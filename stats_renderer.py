@@ -38,29 +38,33 @@ class StatsRenderer:
         self.project_root = Path(__file__).resolve().parent.parent.parent
         self.logger.debug(f"Project root: {self.project_root}")
 
-        # Load fonts - EXACT match to odds-ticker
-        # Odds-ticker uses PressStart2P-Regular.ttf at size 8 for all text
+        # Load fonts
         try:
             font_dir = self.project_root / 'assets' / 'fonts'
-            font_path = font_dir / 'PressStart2P-Regular.ttf'
+            press_start_path = font_dir / 'PressStart2P-Regular.ttf'
+            name_font_path = font_dir / '5by7.regular.ttf'
 
-            if font_path.exists():
-                # Use size 6 for player names (prevent descenders from hanging too low)
-                self.team_font = ImageFont.truetype(str(font_path), 8)
-                self.small_font = ImageFont.truetype(str(font_path), 6)
-                self.medium_font = ImageFont.truetype(str(font_path), 8)
-                # Load larger font for stat labels
-                self.stat_label_font = ImageFont.truetype(str(font_path), 8)
-                # Load larger font for numbers in new layout
-                self.number_font = ImageFont.truetype(str(font_path), 10)
-                self.logger.debug(f"Loaded PressStart2P font at sizes 6, 8, and 10")
+            if press_start_path.exists():
+                self.team_font = ImageFont.truetype(str(press_start_path), 8)
+                self.medium_font = ImageFont.truetype(str(press_start_path), 8)
+                self.stat_label_font = ImageFont.truetype(str(press_start_path), 8)
+                self.number_font = ImageFont.truetype(str(press_start_path), 10)
             else:
-                self.logger.warning(f"Font not found: {font_path}, using default")
+                self.logger.warning(f"Font not found: {press_start_path}, using default")
                 self.team_font = ImageFont.load_default()
-                self.small_font = ImageFont.load_default()
                 self.medium_font = ImageFont.load_default()
                 self.stat_label_font = ImageFont.load_default()
                 self.number_font = ImageFont.load_default()
+
+            # Use 5by7 bitmap font for player names (clearer at small sizes)
+            if name_font_path.exists():
+                self.small_font = ImageFont.truetype(str(name_font_path), 7)
+                self.logger.debug("Loaded 5by7 font for player names")
+            elif press_start_path.exists():
+                self.small_font = ImageFont.truetype(str(press_start_path), 6)
+                self.logger.debug("5by7 font not found, falling back to PressStart2P size 6")
+            else:
+                self.small_font = ImageFont.load_default()
 
         except Exception as e:
             self.logger.warning(f"Error loading fonts, using defaults: {e}")
@@ -360,8 +364,7 @@ class StatsRenderer:
 
             # Calculate total width for this stat category
             # Width = label + padding + (name + number + gap) * max_players + padding
-            # Increased gap between number and name from 4 to 6 for better spacing
-            stat_width = label_width + 4 + (max_name_width + max_number_width + 6) * max(max_players, 1) + 4
+            stat_width = label_width + 4 + (max_name_width + max_number_width + 8) * max(max_players, 1) + 4
 
             stat_layouts[stat_name] = {
                 'width': max(stat_width, 40),  # Minimum 40px per stat
@@ -417,19 +420,19 @@ class StatsRenderer:
                     first_name = parts[0] if len(parts) > 0 else name
                     last_name = parts[-1] if len(parts) > 1 else ''
 
-                    # Draw number first (before name for consistency)
+                    # Draw number first (gold)
                     number_text = str(value)
                     draw.text((player_x, 3), number_text, font=self.number_font, fill=COLOR_GOLD)
 
-                    # Draw names after number with padding (increased from 2 to 4 for better spacing)
+                    # Draw names after number with spacing
                     number_width = layout['number_width']
-                    name_x = player_x + number_width + 4
+                    name_x = player_x + number_width + 6
                     draw.text((name_x, 2), first_name, font=self.small_font, fill=COLOR_WHITE)
                     draw.text((name_x, 10), last_name, font=self.small_font, fill=COLOR_WHITE)
 
                     # Move to next player
                     name_width = layout['name_width']
-                    player_x += number_width + name_width + 6
+                    player_x += number_width + name_width + 8
 
             # Draw home team players (y=18 first names, y=26 last names)
             if home_leaders and stat_name in home_leaders:
@@ -443,19 +446,19 @@ class StatsRenderer:
                     first_name = parts[0] if len(parts) > 0 else name
                     last_name = parts[-1] if len(parts) > 1 else ''
 
-                    # Draw number first (before name for consistency)
+                    # Draw number first (gold)
                     number_text = str(value)
                     draw.text((player_x, 19), number_text, font=self.number_font, fill=COLOR_GOLD)
 
-                    # Draw names after number with padding (increased from 2 to 4 for better spacing)
+                    # Draw names after number with spacing
                     number_width = layout['number_width']
-                    name_x = player_x + number_width + 4
+                    name_x = player_x + number_width + 6
                     draw.text((name_x, 18), first_name, font=self.small_font, fill=COLOR_WHITE)
                     draw.text((name_x, 26), last_name, font=self.small_font, fill=COLOR_WHITE)
 
                     # Move to next player
                     name_width = layout['name_width']
-                    player_x += number_width + name_width + 6
+                    player_x += number_width + name_width + 8
 
             # Move to next stat category with extra spacing
             x_pos += stat_width + 8  # Add 8px gap between categories
