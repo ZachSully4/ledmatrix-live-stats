@@ -105,27 +105,28 @@ class StatsRenderer:
                                                   away_score, home_score, period_text, clock, league)
 
             if league in ['nfl', 'ncaaf']:
-                # NFL/NCAAF layout: [Game Info] [gap] [Away Logo] [Away Stats] [gap] [Home Logo] [Home Stats]
-                gap = 16
+                # NFL/NCAAF layout: [Game Info] [gap] [Away Logo] [logo_gap] [Away Stats] [gap] [Home Logo] [logo_gap] [Home Stats]
+                gap = 32       # between major sections
+                logo_gap = 16  # between logo and stats
                 away_logo_panel = self._render_team_logo_panel(league, away_abbr)
                 away_stats_panel = self._render_nfl_team_stats(away_leaders)
                 home_logo_panel = self._render_team_logo_panel(league, home_abbr)
                 home_stats_panel = self._render_nfl_team_stats(home_leaders)
 
                 total_width = (panel1.width + gap
-                               + away_logo_panel.width + away_stats_panel.width + gap
-                               + home_logo_panel.width + home_stats_panel.width)
+                               + away_logo_panel.width + logo_gap + away_stats_panel.width + gap
+                               + home_logo_panel.width + logo_gap + home_stats_panel.width)
 
                 img = Image.new('RGB', (total_width, self.display_height), color=COLOR_BLACK)
                 current_x = 0
                 img.paste(panel1, (current_x, 0))
                 current_x += panel1.width + gap
                 img.paste(away_logo_panel, (current_x, 0))
-                current_x += away_logo_panel.width
+                current_x += away_logo_panel.width + logo_gap
                 img.paste(away_stats_panel, (current_x, 0))
                 current_x += away_stats_panel.width + gap
                 img.paste(home_logo_panel, (current_x, 0))
-                current_x += home_logo_panel.width
+                current_x += home_logo_panel.width + logo_gap
                 img.paste(home_stats_panel, (current_x, 0))
             else:
                 # Basketball layout: [Game Info] [Combined Stats (stacked top/bottom)]
@@ -569,7 +570,7 @@ class StatsRenderer:
             PIL Image of the stats panel
         """
         height = self.display_height
-        section_gap = 16
+        section_gap = 32
 
         if not leaders:
             panel = Image.new('RGB', (100, height), color=COLOR_BLACK)
@@ -632,6 +633,51 @@ class StatsRenderer:
         sections.append(self._render_nfl_section(
             rec_name, COLOR_WHITE, rec_value,
         ))
+
+        # --- Defensive Sections ---
+        def_data = leaders.get('DEF', {})
+        if def_data:
+            # Section 7: Tackle Leader
+            tackle_name = def_data.get('tackle_leader_name', 'TBD')
+            tackle_total = def_data.get('tackle_leader_total', 0)
+            if tackle_total > 0:
+                sections.append(self._render_nfl_section(
+                    tackle_name, COLOR_WHITE,
+                    [(str(tackle_total), self.number_font, COLOR_GOLD),
+                     (" Tackles", self.stat_label_font, COLOR_GOLD)],
+                ))
+
+            # Section 8: Total Sacks
+            total_sacks = def_data.get('total_sacks', 0)
+            if total_sacks >= 1:
+                sections.append(self._render_nfl_section(
+                    "Total Sacks", COLOR_LIGHT_BLUE,
+                    [(str(total_sacks), self.number_font, COLOR_GOLD)],
+                ))
+
+            # Section 9: Forced Fumbles (only if >= 1)
+            forced_fumbles = def_data.get('forced_fumbles', 0)
+            if forced_fumbles >= 1:
+                sections.append(self._render_nfl_section(
+                    "Forced Fumbles", COLOR_LIGHT_BLUE,
+                    [(str(forced_fumbles), self.number_font, COLOR_GOLD)],
+                ))
+
+            # Section 10: Fumble Recoveries (only if >= 1)
+            fumble_recoveries = def_data.get('fumble_recoveries', 0)
+            if fumble_recoveries >= 1:
+                sections.append(self._render_nfl_section(
+                    "Fumble Recoveries", COLOR_LIGHT_BLUE,
+                    [(str(fumble_recoveries), self.number_font, COLOR_GOLD)],
+                ))
+
+            # Section 11: Interceptions (only if >= 1)
+            interceptions = def_data.get('interceptions', 0)
+            if interceptions >= 1:
+                sections.append(self._render_nfl_section(
+                    "Interceptions", COLOR_LIGHT_BLUE,
+                    [(str(interceptions), self.number_font, COLOR_GOLD)],
+                ))
 
         # Concatenate sections horizontally with gaps
         total_width = sum(s.width for s in sections) + section_gap * (len(sections) - 1)

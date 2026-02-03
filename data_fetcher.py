@@ -266,11 +266,15 @@ class DataFetcher:
                             'PASS': {'leader_name': 'Geno Smith', 'leader_yards': 215},
                             'RUSH': {'team_total_yards': 142, 'leader_name': 'Kenneth Walker', 'leader_yards': 87, 'leader_tds': 1},
                             'REC': {'team_total_yards': 215, 'leader_name': 'DK Metcalf', 'leader_yards': 68, 'leader_tds': 2},
+                            'DEF': {'tackle_leader_name': 'Jordyn Brooks', 'tackle_leader_total': 7,
+                                    'total_sacks': 3, 'forced_fumbles': 1, 'fumble_recoveries': 1, 'interceptions': 2},
                         }
                         game_data['home_leaders'] = {
                             'PASS': {'leader_name': 'Drake Maye', 'leader_yards': 189},
                             'RUSH': {'team_total_yards': 98, 'leader_name': 'Rhamondre Stevenson', 'leader_yards': 72, 'leader_tds': 0},
                             'REC': {'team_total_yards': 189, 'leader_name': 'Hunter Henry', 'leader_yards': 54, 'leader_tds': 1},
+                            'DEF': {'tackle_leader_name': 'Ja\'Whaun Bentley', 'tackle_leader_total': 9,
+                                    'total_sacks': 1, 'forced_fumbles': 0, 'fumble_recoveries': 0, 'interceptions': 1},
                         }
                     else:
                         # Generic placeholder for other NFL upcoming games
@@ -278,6 +282,8 @@ class DataFetcher:
                             'PASS': {'leader_name': 'TBD', 'leader_yards': 0},
                             'RUSH': {'team_total_yards': 0, 'leader_name': 'TBD', 'leader_yards': 0, 'leader_tds': 0},
                             'REC': {'team_total_yards': 0, 'leader_name': 'TBD', 'leader_yards': 0, 'leader_tds': 0},
+                            'DEF': {'tackle_leader_name': 'TBD', 'tackle_leader_total': 0,
+                                    'total_sacks': 0, 'forced_fumbles': 0, 'fumble_recoveries': 0, 'interceptions': 0},
                         }
                         game_data['home_leaders'] = placeholder
                         game_data['away_leaders'] = placeholder
@@ -573,7 +579,63 @@ class DataFetcher:
                 if not athletes:
                     continue
 
-                # Find YDS and TD indices from labels
+                # Handle defensive stats separately
+                if group_name == 'defensive':
+                    # Find indices for defensive labels
+                    tot_idx = None
+                    sack_idx = None
+                    ff_idx = None
+                    fr_idx = None
+                    int_idx = None
+                    for i, label in enumerate(labels):
+                        upper = label.upper()
+                        if upper == 'TOT':
+                            tot_idx = i
+                        elif upper in ('SACK', 'SACKS'):
+                            sack_idx = i
+                        elif upper == 'FF':
+                            ff_idx = i
+                        elif upper in ('FR', 'FRCV'):
+                            fr_idx = i
+                        elif upper == 'INT':
+                            int_idx = i
+
+                    tackle_best = {'name': None, 'total': 0}
+                    team_sacks = 0
+                    team_ff = 0
+                    team_fr = 0
+                    team_int = 0
+
+                    for athlete in athletes:
+                        name = athlete.get('athlete', {}).get('displayName', 'Unknown')
+                        stats = athlete.get('stats', [])
+                        try:
+                            tot = int(float(stats[tot_idx])) if tot_idx is not None and tot_idx < len(stats) else 0
+                            sck = float(stats[sack_idx]) if sack_idx is not None and sack_idx < len(stats) else 0
+                            ff = int(stats[ff_idx]) if ff_idx is not None and ff_idx < len(stats) else 0
+                            fr = int(stats[fr_idx]) if fr_idx is not None and fr_idx < len(stats) else 0
+                            ints = int(stats[int_idx]) if int_idx is not None and int_idx < len(stats) else 0
+                        except (ValueError, TypeError):
+                            continue
+
+                        team_sacks += sck
+                        team_ff += ff
+                        team_fr += fr
+                        team_int += ints
+                        if tot > tackle_best['total'] or tackle_best['name'] is None:
+                            tackle_best = {'name': name, 'total': tot}
+
+                    leaders['DEF'] = {
+                        'tackle_leader_name': tackle_best['name'] or 'TBD',
+                        'tackle_leader_total': tackle_best['total'],
+                        'total_sacks': int(team_sacks),
+                        'forced_fumbles': team_ff,
+                        'fumble_recoveries': team_fr,
+                        'interceptions': team_int,
+                    }
+                    continue
+
+                # Find YDS and TD indices from labels (offense groups)
                 yds_idx = None
                 td_idx = None
                 for i, label in enumerate(labels):
