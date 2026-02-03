@@ -313,8 +313,13 @@ class StatsRenderer:
         min_width = 200
         height = self.display_height
 
-        # Determine which stats to show
-        stat_names = ['PTS', 'REB', 'AST', 'STL', 'BLK'] if expanded_stats else ['PTS', 'REB', 'AST']
+        # Determine which stats to show based on league
+        if league in ['nfl', 'ncaaf']:
+            stat_names = ['PASS', 'RUSH', 'REC']
+        elif expanded_stats:
+            stat_names = ['PTS', 'REB', 'AST', 'STL', 'BLK']
+        else:
+            stat_names = ['PTS', 'REB', 'AST']
 
         # Create temporary image for width calculation
         temp_img = Image.new('RGB', (2000, height), color=COLOR_BLACK)

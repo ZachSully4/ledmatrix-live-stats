@@ -90,6 +90,7 @@ class DataFetcher:
 
             # Extract live games
             live_games = []
+            upcoming_event = None
             total_events = len(scoreboard.get('events', []))
             self.logger.debug(f"Processing {total_events} total events for {league_key}")
 
@@ -111,18 +112,27 @@ class DataFetcher:
                     home = comps[1].get('team', {}).get('abbreviation', '?')
                     self.logger.info(f"Game: {away} @ {home}, Status: {status_state} ({status_detail})")
 
-                if status_state != 'in':
-                    continue
+                if status_state == 'in':
+                    # Parse live game
+                    game_info = self._parse_game_event(event, league_key, favorite_teams, favorite_team_expanded_stats)
+                    if game_info:
+                        live_games.append(game_info)
+                        self.logger.info(f"Parsed live game: {game_info.get('away_abbr')} @ {game_info.get('home_abbr')}, "
+                                       f"home_leaders: {bool(game_info.get('home_leaders'))}, "
+                                       f"away_leaders: {bool(game_info.get('away_leaders'))}")
+                elif status_state == 'pre' and upcoming_event is None and league_key == 'nfl':
+                    # Track first upcoming NFL game as fallback
+                    upcoming_event = event
 
-                # Parse game event
-                game_info = self._parse_game_event(event, league_key, favorite_teams, favorite_team_expanded_stats)
+            # NFL: if no live games, include the next upcoming game with placeholder stats
+            if not live_games and upcoming_event and league_key == 'nfl':
+                game_info = self._parse_game_event(upcoming_event, league_key, favorite_teams, favorite_team_expanded_stats,
+                                                   is_upcoming=True)
                 if game_info:
                     live_games.append(game_info)
-                    self.logger.info(f"Parsed live game: {game_info.get('away_abbr')} @ {game_info.get('home_abbr')}, "
-                                   f"home_leaders: {bool(game_info.get('home_leaders'))}, "
-                                   f"away_leaders: {bool(game_info.get('away_leaders'))}")
+                    self.logger.info(f"Added upcoming NFL game: {game_info.get('away_abbr')} @ {game_info.get('home_abbr')}")
 
-            self.logger.info(f"Found {len(live_games)} live games in {league_key} (out of {total_events} total, max={max_games})")
+            self.logger.info(f"Found {len(live_games)} games in {league_key} (out of {total_events} total, max={max_games})")
             return live_games
 
         except Exception as e:
@@ -130,7 +140,7 @@ class DataFetcher:
             return []
 
     def _parse_game_event(self, event: Dict, league_key: str, favorite_teams: List[str] = None,
-                         favorite_team_expanded_stats: bool = True) -> Optional[Dict]:
+                         favorite_team_expanded_stats: bool = True, is_upcoming: bool = False) -> Optional[Dict]:
         """
         Parse a game event and extract relevant information.
 
@@ -139,6 +149,7 @@ class DataFetcher:
             league_key: League identifier for sport-specific parsing
             favorite_teams: List of favorite team abbreviations
             favorite_team_expanded_stats: Show expanded stats for favorite team games
+            is_upcoming: If True, this is an upcoming game (generate placeholder stats)
 
         Returns:
             Dictionary with game info and stat leaders, or None if parsing fails
@@ -200,6 +211,25 @@ class DataFetcher:
                 'is_favorite': is_favorite,
                 'expanded_stats': is_favorite and favorite_team_expanded_stats,
             }
+
+            # For upcoming games, generate placeholder stats with zero values
+            if is_upcoming:
+                if league_key in ['nfl', 'ncaaf']:
+                    placeholder = {
+                        'PASS': [{'name': 'TBD', 'value': 0}],
+                        'RUSH': [{'name': 'TBD', 'value': 0}],
+                        'REC': [{'name': 'TBD', 'value': 0}],
+                    }
+                else:
+                    placeholder = {
+                        'PTS': [{'name': 'TBD', 'value': 0}],
+                        'REB': [{'name': 'TBD', 'value': 0}],
+                        'AST': [{'name': 'TBD', 'value': 0}],
+                    }
+                game_data['home_leaders'] = placeholder
+                game_data['away_leaders'] = placeholder
+                game_data['period_text'] = 'Upcoming'
+                return game_data
 
             # Fetch detailed boxscore for player stats
             if game_id:
@@ -447,17 +477,77 @@ class DataFetcher:
         """
         Extract football leaders from boxscore data.
 
+        Uses PASS/RUSH/REC keys with yards as the value, matching the
+        same list-of-dict format as basketball leaders for the renderer.
+
         Args:
             boxscore: Boxscore response from ESPN
             home_away: 'home' or 'away'
 
         Returns:
-            Leaders dict or None
+            Leaders dict with PASS/RUSH/REC leaders or None
         """
-        # Similar structure to basketball, but look for passing/rushing/receiving stats
-        # Implementation similar to _extract_boxscore_basketball_leaders
-        # For now, return None as football structure may differ
-        return None
+        try:
+            players_section = boxscore.get('boxscore', {}).get('players', [])
+            if not players_section:
+                return None
+
+            # Find the correct team (ESPN orders home_away in players array)
+            team_idx = 1 if home_away == 'home' else 0
+            if team_idx >= len(players_section):
+                return None
+
+            team_data = players_section[team_idx]
+            statistics = team_data.get('statistics', [])
+            if not statistics:
+                return None
+
+            leaders = {}
+
+            for stats_group in statistics:
+                group_name = stats_group.get('name', '').lower()
+                athletes = stats_group.get('athletes', [])
+                labels = stats_group.get('labels', [])
+
+                if not athletes:
+                    continue
+
+                # Find yards index from labels
+                yds_idx = None
+                for i, label in enumerate(labels):
+                    if label.upper() == 'YDS':
+                        yds_idx = i
+                        break
+
+                if yds_idx is None:
+                    continue
+
+                # Get top player by yards
+                best = {'name': None, 'value': 0}
+                for athlete in athletes:
+                    name = athlete.get('athlete', {}).get('displayName', 'Unknown')
+                    stats = athlete.get('stats', [])
+                    if yds_idx < len(stats):
+                        try:
+                            yds = int(stats[yds_idx])
+                            if yds > best['value'] or best['name'] is None:
+                                best = {'name': name, 'value': yds}
+                        except (ValueError, TypeError):
+                            continue
+
+                if best['name']:
+                    if group_name == 'passing':
+                        leaders['PASS'] = [best]
+                    elif group_name == 'rushing':
+                        leaders['RUSH'] = [best]
+                    elif group_name == 'receiving':
+                        leaders['REC'] = [best]
+
+            return leaders if leaders else None
+
+        except Exception as e:
+            self.logger.debug(f"Error extracting football leaders from boxscore: {e}")
+            return None
 
     def extract_basketball_leaders(self, competitor_data: Dict) -> Optional[Dict]:
         """
