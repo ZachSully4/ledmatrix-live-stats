@@ -526,8 +526,6 @@ class StatsRenderer:
             PIL Image of this section
         """
         height = self.display_height
-        title_y = 4
-        value_y = 18
         temp_draw = ImageDraw.Draw(Image.new('RGB', (1, 1)))
 
         title_w = int(temp_draw.textlength(title, font=self.stat_label_font))
@@ -537,14 +535,17 @@ class StatsRenderer:
         panel = Image.new('RGB', (section_width, height), color=COLOR_BLACK)
         draw = ImageDraw.Draw(panel)
 
-        # Draw title
-        draw.text((2, title_y), title, font=self.stat_label_font, fill=title_color)
-
-        # Draw value segments
-        x = 2
-        for text, font, color in value_parts:
-            draw.text((x, value_y), text, font=font, fill=color)
-            x += int(draw.textlength(text, font=font))
+        if value_parts:
+            # Two lines: title at top, value below
+            draw.text((2, 4), title, font=self.stat_label_font, fill=title_color)
+            x = 2
+            for text, font, color in value_parts:
+                draw.text((x, 18), text, font=font, fill=color)
+                x += int(draw.textlength(text, font=font))
+        else:
+            # Title only: center vertically
+            title_y = (height - 8) // 2
+            draw.text((2, title_y), title, font=self.stat_label_font, fill=title_color)
 
         return panel
 
@@ -578,16 +579,15 @@ class StatsRenderer:
 
         sections = []
 
-        # --- Section 1: Passing Yards ---
+        # --- Section 1: Passing Yards (centered, title only) ---
         pass_data = leaders.get('PASS', {})
         pass_yards = str(pass_data.get('leader_yards', 0))
         pass_name = pass_data.get('leader_name', 'TBD')
         sections.append(self._render_nfl_section(
-            "Passing Yards", COLOR_LIGHT_BLUE,
-            [(f"{pass_yards}YDS", self.number_font, COLOR_GOLD)],
+            "Passing Yards", COLOR_LIGHT_BLUE, [],
         ))
 
-        # --- Section 2: QB Name ---
+        # --- Section 2: QB Name + yards ---
         sections.append(self._render_nfl_section(
             pass_name, COLOR_WHITE,
             [(f"{pass_yards}YDS", self.number_font, COLOR_GOLD)],
