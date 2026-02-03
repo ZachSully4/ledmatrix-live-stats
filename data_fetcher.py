@@ -6,7 +6,7 @@ basketball (NBA/NCAAM) and football (NFL/NCAAF) games.
 """
 
 from typing import Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 # ESPN API league mapping
@@ -87,6 +87,26 @@ class DataFetcher:
             if not scoreboard or 'events' not in scoreboard:
                 self.logger.debug(f"No scoreboard data for {league_key}")
                 return []
+
+            # NFL: if today's scoreboard has no events, fetch next 7 days
+            if not scoreboard.get('events') and league_key == 'nfl':
+                today = datetime.now()
+                end_date = today + timedelta(days=7)
+                date_range = f"{today.strftime('%Y%m%d')}-{end_date.strftime('%Y%m%d')}"
+                range_cache_key = f"live_stats_{league_key}_{date_range}"
+                self.logger.info(f"No NFL games today, fetching next 7 days: {date_range}")
+
+                scoreboard = self.api_helper.fetch_espn_scoreboard(
+                    sport=sport,
+                    league=league,
+                    date=date_range,
+                    cache_key=range_cache_key,
+                    cache_ttl=300
+                )
+
+                if not scoreboard or 'events' not in scoreboard:
+                    self.logger.debug("No NFL games found in next 7 days either")
+                    return []
 
             # Extract live games
             live_games = []
