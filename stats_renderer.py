@@ -16,6 +16,7 @@ COLOR_LIGHT_BLUE = (77, 190, 238)
 COLOR_GRAY = (170, 170, 170)
 COLOR_BLACK = (0, 0, 0)
 COLOR_GOLD = (255, 215, 0)
+COLOR_GREEN = (0, 255, 0)
 
 
 class StatsRenderer:
@@ -41,30 +42,21 @@ class StatsRenderer:
         # Load fonts
         try:
             font_dir = self.project_root / 'assets' / 'fonts'
-            press_start_path = font_dir / 'PressStart2P-Regular.ttf'
-            name_font_path = font_dir / '5by7.regular.ttf'
+            font_path = font_dir / 'PressStart2P-Regular.ttf'
 
-            if press_start_path.exists():
-                self.team_font = ImageFont.truetype(str(press_start_path), 8)
-                self.medium_font = ImageFont.truetype(str(press_start_path), 8)
-                self.stat_label_font = ImageFont.truetype(str(press_start_path), 8)
-                self.number_font = ImageFont.truetype(str(press_start_path), 10)
+            if font_path.exists():
+                self.team_font = ImageFont.truetype(str(font_path), 8)
+                self.small_font = ImageFont.truetype(str(font_path), 6)
+                self.medium_font = ImageFont.truetype(str(font_path), 8)
+                self.stat_label_font = ImageFont.truetype(str(font_path), 8)
+                self.number_font = ImageFont.truetype(str(font_path), 10)
             else:
-                self.logger.warning(f"Font not found: {press_start_path}, using default")
+                self.logger.warning(f"Font not found: {font_path}, using default")
                 self.team_font = ImageFont.load_default()
+                self.small_font = ImageFont.load_default()
                 self.medium_font = ImageFont.load_default()
                 self.stat_label_font = ImageFont.load_default()
                 self.number_font = ImageFont.load_default()
-
-            # Use 5by7 bitmap font for player names (clearer at small sizes)
-            if name_font_path.exists():
-                self.small_font = ImageFont.truetype(str(name_font_path), 7)
-                self.logger.debug("Loaded 5by7 font for player names")
-            elif press_start_path.exists():
-                self.small_font = ImageFont.truetype(str(press_start_path), 6)
-                self.logger.debug("5by7 font not found, falling back to PressStart2P size 6")
-            else:
-                self.small_font = ImageFont.load_default()
 
         except Exception as e:
             self.logger.warning(f"Error loading fonts, using defaults: {e}")
@@ -283,9 +275,9 @@ class StatsRenderer:
         draw.text((current_x, home_y), home_team_text, font=team_font, fill=(255, 255, 255))
         current_x += team_info_width + h_padding
 
-        # Scores (stacked - same y positions as team names)
-        draw.text((current_x, away_y), away_score_text, font=score_font, fill=(255, 255, 255))
-        draw.text((current_x, home_y), home_score_text, font=score_font, fill=(255, 255, 255))
+        # Scores (stacked - same y positions as team names, green for live games)
+        draw.text((current_x, away_y), away_score_text, font=score_font, fill=COLOR_GREEN)
+        draw.text((current_x, home_y), home_score_text, font=score_font, fill=COLOR_GREEN)
         current_x += scores_width + h_padding
 
         # Period/Clock (stacked - same y positions, use team_font like odds-ticker)
@@ -364,7 +356,7 @@ class StatsRenderer:
 
             # Calculate total width for this stat category
             # Width = label + padding + (name + number + gap) * max_players + padding
-            stat_width = label_width + 4 + (max_name_width + max_number_width + 8) * max(max_players, 1) + 4
+            stat_width = label_width + 4 + (max_name_width + max_number_width + 16) * max(max_players, 1) + 4
 
             stat_layouts[stat_name] = {
                 'width': max(stat_width, 40),  # Minimum 40px per stat
@@ -426,13 +418,13 @@ class StatsRenderer:
 
                     # Draw names after number with spacing
                     number_width = layout['number_width']
-                    name_x = player_x + number_width + 6
+                    name_x = player_x + number_width + 12
                     draw.text((name_x, 2), first_name, font=self.small_font, fill=COLOR_WHITE)
                     draw.text((name_x, 10), last_name, font=self.small_font, fill=COLOR_WHITE)
 
                     # Move to next player
                     name_width = layout['name_width']
-                    player_x += number_width + name_width + 8
+                    player_x += number_width + name_width + 16
 
             # Draw home team players (y=18 first names, y=26 last names)
             if home_leaders and stat_name in home_leaders:
@@ -452,13 +444,13 @@ class StatsRenderer:
 
                     # Draw names after number with spacing
                     number_width = layout['number_width']
-                    name_x = player_x + number_width + 6
+                    name_x = player_x + number_width + 12
                     draw.text((name_x, 18), first_name, font=self.small_font, fill=COLOR_WHITE)
                     draw.text((name_x, 26), last_name, font=self.small_font, fill=COLOR_WHITE)
 
                     # Move to next player
                     name_width = layout['name_width']
-                    player_x += number_width + name_width + 8
+                    player_x += number_width + name_width + 16
 
             # Move to next stat category with extra spacing
             x_pos += stat_width + 8  # Add 8px gap between categories
