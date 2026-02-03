@@ -58,11 +58,6 @@
           "maximum": 100,
           "description": "Maximum number of games to display per league (lower values = faster updates)"
         },
-        "power_conferences_only": {
-          "type": "boolean",
-          "default": false,
-          "description": "Show only power conference games (Big Ten, Big 12, SEC, ACC, Big East, Pac-12)"
-        },
         "favorite_teams": {
           "type": "array",
           "items": {"type": "string"},
@@ -86,14 +81,9 @@
             "enabled": {
               "type": "boolean",
               "default": true
-            },
-            "priority": {
-              "type": "integer",
-              "default": 1,
-              "minimum": 1
             }
           },
-          "default": {"enabled": true, "priority": 1}
+          "default": {"enabled": true}
         },
         "nfl": {
           "type": "object",
@@ -101,14 +91,9 @@
             "enabled": {
               "type": "boolean",
               "default": true
-            },
-            "priority": {
-              "type": "integer",
-              "default": 2,
-              "minimum": 1
             }
           },
-          "default": {"enabled": true, "priority": 2}
+          "default": {"enabled": true}
         },
         "ncaam": {
           "type": "object",
@@ -117,13 +102,13 @@
               "type": "boolean",
               "default": true
             },
-            "priority": {
-              "type": "integer",
-              "default": 3,
-              "minimum": 1
+            "power_conferences_only": {
+              "type": "boolean",
+              "default": false,
+              "description": "Show only power conference games (Big Ten, Big 12, SEC, ACC, Big East, Pac-12)"
             }
           },
-          "default": {"enabled": true, "priority": 3}
+          "default": {"enabled": true}
         },
         "ncaaf": {
           "type": "object",
@@ -131,14 +116,9 @@
             "enabled": {
               "type": "boolean",
               "default": false
-            },
-            "priority": {
-              "type": "integer",
-              "default": 4,
-              "minimum": 1
             }
           },
-          "default": {"enabled": false, "priority": 4}
+          "default": {"enabled": false}
         }
       },
       "default": {}

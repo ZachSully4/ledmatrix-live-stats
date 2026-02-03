@@ -78,9 +78,8 @@ class LivePlayerStatsPlugin(BasePlugin):
         self.scroll_helper.set_scroll_delay(display_opts.get('scroll_delay', 0.02))
         self.scroll_helper.set_target_fps(display_opts.get('target_fps', 120))
 
-        # Build league rotation order
-        self.league_rotation_order = self._build_rotation_order()
-        self.current_league_index = 0
+        # Get enabled leagues
+        self.enabled_leagues = self._get_enabled_leagues()
 
         # Plugin state
         self.games_data = []
@@ -97,11 +96,11 @@ class LivePlayerStatsPlugin(BasePlugin):
         # Enable high FPS scrolling mode
         self.enable_scrolling = True
 
-        self.logger.info(f"LivePlayerStats initialized with {len(self.league_rotation_order)} enabled leagues")
+        self.logger.info(f"LivePlayerStats initialized with {len(self.enabled_leagues)} enabled leagues")
 
-    def _build_rotation_order(self):
+    def _get_enabled_leagues(self):
         """
-        Build league rotation order sorted by priority.
+        Get list of enabled leagues.
 
         Returns:
             List of league dictionaries with keys and configs
@@ -112,13 +111,9 @@ class LivePlayerStatsPlugin(BasePlugin):
         for league_key in ['nba', 'nfl', 'ncaam', 'ncaaf']:
             league_config = leagues_config.get(league_key, {})
             if league_config.get('enabled', False):
-                priority = league_config.get('priority', 99)
-                leagues.append((priority, league_key, league_config))
+                leagues.append({'key': league_key, 'config': league_config})
 
-        # Sort by priority (lower number = higher priority)
-        leagues.sort(key=lambda x: x[0])
-
-        return [{'key': k, 'config': c} for _, k, c in leagues]
+        return leagues
 
     def update(self):
         """
@@ -129,7 +124,7 @@ class LivePlayerStatsPlugin(BasePlugin):
         blocking the display loop. New data is applied at the next
         scroll wrap-around for a seamless visual transition.
         """
-        if not self.league_rotation_order:
+        if not self.enabled_leagues:
             self.logger.warning("No leagues enabled")
             self.games_data = []
             self._render_scrolling_content()
@@ -200,45 +195,32 @@ class LivePlayerStatsPlugin(BasePlugin):
 
     def _fetch_games(self):
         """
-        Fetch live games, rotating through leagues if needed.
+        Fetch live games from all enabled leagues and combine them.
 
         Returns:
             List of game dictionaries, or empty list if no games found
         """
         data_settings = self.config.get('data_settings', {})
         max_games = data_settings.get('max_games_per_league', 50)
-        power_conferences_only = data_settings.get('power_conferences_only', False)
         favorite_teams = data_settings.get('favorite_teams', [])
         favorite_team_expanded_stats = data_settings.get('favorite_team_expanded_stats', True)
 
-        # Try current league first
-        current = self.league_rotation_order[self.current_league_index]
-        self.logger.info(f"Fetching data for {current['key']}...")
+        # Legacy fallback: power_conferences_only in data_settings
+        global_power_conf = data_settings.get('power_conferences_only', False)
 
-        live_games = self.data_fetcher.fetch_live_games(
-            current['key'],
-            max_games=max_games,
-            power_conferences_only=power_conferences_only,
-            favorite_teams=favorite_teams,
-            favorite_team_expanded_stats=favorite_team_expanded_stats
-        )
+        all_games = []
+        for league in self.enabled_leagues:
+            league_key = league['key']
+            league_config = league['config']
 
-        if live_games:
-            self.logger.info(
-                f"Found {len(live_games)} live games in {current['key']}"
+            # Per-league power_conferences_only (falls back to global setting)
+            power_conferences_only = league_config.get(
+                'power_conferences_only', global_power_conf
             )
-            return live_games
 
-        # No games in current league - rotate through others
-        attempts = 0
-        while attempts < len(self.league_rotation_order):
-            self.current_league_index = (
-                (self.current_league_index + 1) % len(self.league_rotation_order)
-            )
-            next_league = self.league_rotation_order[self.current_league_index]
-
+            self.logger.info(f"Fetching data for {league_key}...")
             live_games = self.data_fetcher.fetch_live_games(
-                next_league['key'],
+                league_key,
                 max_games=max_games,
                 power_conferences_only=power_conferences_only,
                 favorite_teams=favorite_teams,
@@ -247,14 +229,18 @@ class LivePlayerStatsPlugin(BasePlugin):
 
             if live_games:
                 self.logger.info(
-                    f"Rotated to {next_league['key']} ({len(live_games)} live games)"
+                    f"Found {len(live_games)} live games in {league_key}"
                 )
-                return live_games
+                all_games.extend(live_games)
 
-            attempts += 1
+        if all_games:
+            self.logger.info(
+                f"Found {len(all_games)} total live games across all leagues"
+            )
+        else:
+            self.logger.info("No live games found in any enabled league")
 
-        self.logger.info("No live games found in any enabled league")
-        return []
+        return all_games
 
     def _render_scrolling_content(self):
         """Render scrolling ticker image from game data."""
