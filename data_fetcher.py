@@ -141,8 +141,16 @@ class DataFetcher:
                                        f"home_leaders: {bool(game_info.get('home_leaders'))}, "
                                        f"away_leaders: {bool(game_info.get('away_leaders'))}")
                 elif status_state == 'pre' and upcoming_event is None and league_key == 'nfl':
-                    # Track first upcoming NFL game as fallback
-                    upcoming_event = event
+                    # Track first upcoming NFL game as fallback (skip Pro Bowl / all-star games)
+                    comps_check = comp.get('competitors', [])
+                    is_allstar = False
+                    for c in comps_check:
+                        abbr = c.get('team', {}).get('abbreviation', '')
+                        if abbr in ('AFC', 'NFC'):
+                            is_allstar = True
+                            break
+                    if not is_allstar:
+                        upcoming_event = event
 
             # NFL: if no live games, include the next upcoming game with placeholder stats
             if not live_games and upcoming_event and league_key == 'nfl':
