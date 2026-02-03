@@ -240,22 +240,38 @@ class DataFetcher:
                 'expanded_stats': is_favorite and favorite_team_expanded_stats,
             }
 
-            # For upcoming games, generate placeholder stats with zero values
+            # For upcoming games, generate hardcoded example stats for testing
             if is_upcoming:
                 if league_key in ['nfl', 'ncaaf']:
-                    placeholder = {
-                        'PASS': [{'name': 'TBD', 'value': 0}],
-                        'RUSH': [{'name': 'TBD', 'value': 0}],
-                        'REC': [{'name': 'TBD', 'value': 0}],
-                    }
+                    # Hardcoded SEA @ NE example stats for layout testing
+                    if away_abbr == 'SEA' and home_abbr == 'NE':
+                        game_data['away_leaders'] = {
+                            'PASS': {'leader_name': 'Geno Smith', 'leader_yards': 215},
+                            'RUSH': {'team_total_yards': 142, 'leader_name': 'Kenneth Walker', 'leader_yards': 87, 'leader_tds': 1},
+                            'REC': {'team_total_yards': 215, 'leader_name': 'DK Metcalf', 'leader_yards': 68, 'leader_tds': 2},
+                        }
+                        game_data['home_leaders'] = {
+                            'PASS': {'leader_name': 'Drake Maye', 'leader_yards': 189},
+                            'RUSH': {'team_total_yards': 98, 'leader_name': 'Rhamondre Stevenson', 'leader_yards': 72, 'leader_tds': 0},
+                            'REC': {'team_total_yards': 189, 'leader_name': 'Hunter Henry', 'leader_yards': 54, 'leader_tds': 1},
+                        }
+                    else:
+                        # Generic placeholder for other NFL upcoming games
+                        placeholder = {
+                            'PASS': {'leader_name': 'TBD', 'leader_yards': 0},
+                            'RUSH': {'team_total_yards': 0, 'leader_name': 'TBD', 'leader_yards': 0, 'leader_tds': 0},
+                            'REC': {'team_total_yards': 0, 'leader_name': 'TBD', 'leader_yards': 0, 'leader_tds': 0},
+                        }
+                        game_data['home_leaders'] = placeholder
+                        game_data['away_leaders'] = placeholder
                 else:
                     placeholder = {
                         'PTS': [{'name': 'TBD', 'value': 0}],
                         'REB': [{'name': 'TBD', 'value': 0}],
                         'AST': [{'name': 'TBD', 'value': 0}],
                     }
-                game_data['home_leaders'] = placeholder
-                game_data['away_leaders'] = placeholder
+                    game_data['home_leaders'] = placeholder
+                    game_data['away_leaders'] = placeholder
                 game_data['period_text'] = 'Upcoming'
                 return game_data
 
@@ -505,15 +521,15 @@ class DataFetcher:
         """
         Extract football leaders from boxscore data.
 
-        Uses PASS/RUSH/REC keys with yards as the value, matching the
-        same list-of-dict format as basketball leaders for the renderer.
+        Returns richer dict with team totals and TD counts for the
+        NFL-specific horizontal stats renderer.
 
         Args:
             boxscore: Boxscore response from ESPN
             home_away: 'home' or 'away'
 
         Returns:
-            Leaders dict with PASS/RUSH/REC leaders or None
+            Leaders dict with PASS/RUSH/REC data or None
         """
         try:
             players_section = boxscore.get('boxscore', {}).get('players', [])
@@ -540,36 +556,56 @@ class DataFetcher:
                 if not athletes:
                     continue
 
-                # Find yards index from labels
+                # Find YDS and TD indices from labels
                 yds_idx = None
+                td_idx = None
                 for i, label in enumerate(labels):
-                    if label.upper() == 'YDS':
+                    upper = label.upper()
+                    if upper == 'YDS':
                         yds_idx = i
-                        break
+                    elif upper == 'TD':
+                        td_idx = i
 
                 if yds_idx is None:
                     continue
 
-                # Get top player by yards
-                best = {'name': None, 'value': 0}
+                # Accumulate team total and find leader
+                team_total_yards = 0
+                best = {'name': None, 'yards': 0, 'tds': 0}
+
                 for athlete in athletes:
                     name = athlete.get('athlete', {}).get('displayName', 'Unknown')
                     stats = athlete.get('stats', [])
-                    if yds_idx < len(stats):
-                        try:
-                            yds = int(stats[yds_idx])
-                            if yds > best['value'] or best['name'] is None:
-                                best = {'name': name, 'value': yds}
-                        except (ValueError, TypeError):
-                            continue
+                    try:
+                        yds = int(stats[yds_idx]) if yds_idx < len(stats) else 0
+                        tds = int(stats[td_idx]) if td_idx is not None and td_idx < len(stats) else 0
+                    except (ValueError, TypeError):
+                        continue
+
+                    team_total_yards += yds
+                    if yds > best['yards'] or best['name'] is None:
+                        best = {'name': name, 'yards': yds, 'tds': tds}
 
                 if best['name']:
                     if group_name == 'passing':
-                        leaders['PASS'] = [best]
+                        leaders['PASS'] = {
+                            'leader_name': best['name'],
+                            'leader_yards': best['yards'],
+                        }
                     elif group_name == 'rushing':
-                        leaders['RUSH'] = [best]
+                        leaders['RUSH'] = {
+                            'team_total_yards': team_total_yards,
+                            'leader_name': best['name'],
+                            'leader_yards': best['yards'],
+                            'leader_tds': best['tds'],
+                        }
                     elif group_name == 'receiving':
-                        leaders['REC'] = [best]
+                        leaders['REC'] = {
+                            'team_total_yards': team_total_yards,
+                            'leader_name': best['name'],
+                            'leader_yards': best['yards'],
+                            'leader_tds': best['tds'],
+                        }
 
             return leaders if leaders else None
 

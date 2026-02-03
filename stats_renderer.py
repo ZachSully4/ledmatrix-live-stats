@@ -104,20 +104,39 @@ class StatsRenderer:
                                                   away_record, home_record, away_rank, home_rank,
                                                   away_score, home_score, period_text, clock, league)
 
-            # --- PANEL 2: Combined Stats (stacked top/bottom, dynamically sized) ---
-            panel2 = self._render_combined_stats_panel(away_leaders, home_leaders, league, expanded_stats)
+            if league in ['nfl', 'ncaaf']:
+                # NFL/NCAAF layout: [Game Info] [gap] [Away Logo] [Away Stats] [gap] [Home Logo] [Home Stats]
+                gap = 16
+                away_logo_panel = self._render_team_logo_panel(league, away_abbr)
+                away_stats_panel = self._render_nfl_team_stats(away_leaders)
+                home_logo_panel = self._render_team_logo_panel(league, home_abbr)
+                home_stats_panel = self._render_nfl_team_stats(home_leaders)
 
-            # Calculate total width dynamically
-            total_width = panel1.width + panel2.width
+                total_width = (panel1.width + gap
+                               + away_logo_panel.width + away_stats_panel.width + gap
+                               + home_logo_panel.width + home_stats_panel.width)
 
-            # Create full image with dynamic width
-            img = Image.new('RGB', (total_width, self.display_height), color=COLOR_BLACK)
+                img = Image.new('RGB', (total_width, self.display_height), color=COLOR_BLACK)
+                current_x = 0
+                img.paste(panel1, (current_x, 0))
+                current_x += panel1.width + gap
+                img.paste(away_logo_panel, (current_x, 0))
+                current_x += away_logo_panel.width
+                img.paste(away_stats_panel, (current_x, 0))
+                current_x += away_stats_panel.width + gap
+                img.paste(home_logo_panel, (current_x, 0))
+                current_x += home_logo_panel.width
+                img.paste(home_stats_panel, (current_x, 0))
+            else:
+                # Basketball layout: [Game Info] [Combined Stats (stacked top/bottom)]
+                panel2 = self._render_combined_stats_panel(away_leaders, home_leaders, league, expanded_stats)
 
-            # Paste panels side by side
-            current_x = 0
-            img.paste(panel1, (current_x, 0))
-            current_x += panel1.width
-            img.paste(panel2, (current_x, 0))
+                total_width = panel1.width + panel2.width
+                img = Image.new('RGB', (total_width, self.display_height), color=COLOR_BLACK)
+                current_x = 0
+                img.paste(panel1, (current_x, 0))
+                current_x += panel1.width
+                img.paste(panel2, (current_x, 0))
 
             return img
 
@@ -459,6 +478,149 @@ class StatsRenderer:
 
             # Move to next stat category with extra spacing
             x_pos += stat_width + 8  # Add 8px gap between categories
+
+        return panel
+
+    def _render_team_logo_panel(self, league: str, team_abbr: str) -> Image.Image:
+        """
+        Render a single team logo centered in a panel.
+
+        Args:
+            league: League identifier for logo lookup
+            team_abbr: Team abbreviation
+
+        Returns:
+            PIL Image (38x32) with centered team logo
+        """
+        logo_size = int(self.display_height * 1.2)  # 38px for 32px display
+        panel = Image.new('RGB', (logo_size, self.display_height), color=COLOR_BLACK)
+
+        logo = self._get_team_logo(league, team_abbr)
+        if logo:
+            logo = logo.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
+            y_pos = (self.display_height - logo_size) // 2
+            panel.paste(logo, (0, y_pos), logo if logo.mode == 'RGBA' else None)
+        else:
+            # Fallback: draw team abbreviation
+            draw = ImageDraw.Draw(panel)
+            abbr_text = team_abbr[:4]
+            text_width = int(draw.textlength(abbr_text, font=self.team_font))
+            text_x = (logo_size - text_width) // 2
+            text_y = (self.display_height - 8) // 2
+            draw.text((text_x, text_y), abbr_text, font=self.team_font, fill=COLOR_GRAY)
+
+        return panel
+
+    def _render_nfl_team_stats(self, leaders: Optional[Dict]) -> Image.Image:
+        """
+        Render one NFL team's stats panel using full 32px height with 3 rows.
+
+        Layout:
+            Row 0 (y=2):  QB:   Smith 215YDS
+            Row 1 (y=12): RUSH: 142YDS  Walker 87YDS 1TD
+            Row 2 (y=22): REC:  215YDS  Metcalf 68YDS 2TD
+
+        Args:
+            leaders: Dict with PASS/RUSH/REC data in richer format
+
+        Returns:
+            PIL Image of the stats panel
+        """
+        height = self.display_height
+        row_y = [2, 12, 22]
+
+        if not leaders:
+            panel = Image.new('RGB', (100, height), color=COLOR_BLACK)
+            draw = ImageDraw.Draw(panel)
+            draw.text((2, 12), "No stats", font=self.small_font, fill=COLOR_GRAY)
+            return panel
+
+        # Build text elements for each row to calculate width
+        temp_draw = ImageDraw.Draw(Image.new('RGB', (1, 1)))
+        rows = []
+
+        # Row 0: QB line
+        pass_data = leaders.get('PASS', {})
+        qb_label = "QB:"
+        qb_name = pass_data.get('leader_name', 'TBD')
+        # Use last name only
+        qb_parts = qb_name.split()
+        qb_last = qb_parts[-1] if len(qb_parts) > 1 else qb_name
+        qb_yards = str(pass_data.get('leader_yards', 0))
+        rows.append({'label': qb_label, 'segments': [
+            {'text': qb_last, 'font': self.small_font, 'color': COLOR_WHITE},
+            {'text': ' ', 'font': self.small_font, 'color': COLOR_WHITE},
+            {'text': f"{qb_yards}YDS", 'font': self.stat_label_font, 'color': COLOR_GOLD},
+        ]})
+
+        # Row 1: RUSH line
+        rush_data = leaders.get('RUSH', {})
+        rush_label = "RUSH:"
+        rush_total = str(rush_data.get('team_total_yards', 0))
+        rush_name = rush_data.get('leader_name', 'TBD')
+        rush_parts = rush_name.split()
+        rush_last = rush_parts[-1] if len(rush_parts) > 1 else rush_name
+        rush_yards = str(rush_data.get('leader_yards', 0))
+        rush_tds = rush_data.get('leader_tds', 0)
+        rush_segments = [
+            {'text': f"{rush_total}YDS", 'font': self.stat_label_font, 'color': COLOR_GOLD},
+            {'text': '  ', 'font': self.small_font, 'color': COLOR_WHITE},
+            {'text': rush_last, 'font': self.small_font, 'color': COLOR_WHITE},
+            {'text': ' ', 'font': self.small_font, 'color': COLOR_WHITE},
+            {'text': f"{rush_yards}YDS", 'font': self.stat_label_font, 'color': COLOR_GOLD},
+        ]
+        if rush_tds > 0:
+            rush_segments.append({'text': ' ', 'font': self.small_font, 'color': COLOR_WHITE})
+            rush_segments.append({'text': f"{rush_tds}TD", 'font': self.stat_label_font, 'color': COLOR_GOLD})
+        rows.append({'label': rush_label, 'segments': rush_segments})
+
+        # Row 2: REC line
+        rec_data = leaders.get('REC', {})
+        rec_label = "REC:"
+        rec_total = str(rec_data.get('team_total_yards', 0))
+        rec_name = rec_data.get('leader_name', 'TBD')
+        rec_parts = rec_name.split()
+        rec_last = rec_parts[-1] if len(rec_parts) > 1 else rec_name
+        rec_yards = str(rec_data.get('leader_yards', 0))
+        rec_tds = rec_data.get('leader_tds', 0)
+        rec_segments = [
+            {'text': f"{rec_total}YDS", 'font': self.stat_label_font, 'color': COLOR_GOLD},
+            {'text': '  ', 'font': self.small_font, 'color': COLOR_WHITE},
+            {'text': rec_last, 'font': self.small_font, 'color': COLOR_WHITE},
+            {'text': ' ', 'font': self.small_font, 'color': COLOR_WHITE},
+            {'text': f"{rec_yards}YDS", 'font': self.stat_label_font, 'color': COLOR_GOLD},
+        ]
+        if rec_tds > 0:
+            rec_segments.append({'text': ' ', 'font': self.small_font, 'color': COLOR_WHITE})
+            rec_segments.append({'text': f"{rec_tds}TD", 'font': self.stat_label_font, 'color': COLOR_GOLD})
+        rows.append({'label': rec_label, 'segments': rec_segments})
+
+        # Calculate max width needed
+        max_width = 0
+        label_gap = 4  # gap after label
+        for row in rows:
+            label_w = int(temp_draw.textlength(row['label'], font=self.stat_label_font))
+            content_w = sum(int(temp_draw.textlength(seg['text'], font=seg['font'])) for seg in row['segments'])
+            total_w = label_w + label_gap + content_w
+            max_width = max(max_width, total_w)
+
+        panel_width = max_width + 8  # padding
+        panel = Image.new('RGB', (panel_width, height), color=COLOR_BLACK)
+        draw = ImageDraw.Draw(panel)
+
+        # Draw each row
+        for i, row in enumerate(rows):
+            y = row_y[i]
+            x = 2
+
+            # Draw label in light blue
+            draw.text((x, y), row['label'], font=self.stat_label_font, fill=COLOR_LIGHT_BLUE)
+            x += int(draw.textlength(row['label'], font=self.stat_label_font)) + label_gap
+
+            # Draw each segment
+            for seg in row['segments']:
+                draw.text((x, y), seg['text'], font=seg['font'], fill=seg['color'])
+                x += int(draw.textlength(seg['text'], font=seg['font']))
 
         return panel
 
