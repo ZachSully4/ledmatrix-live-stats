@@ -257,41 +257,23 @@ class DataFetcher:
                 'expanded_stats': is_favorite and favorite_team_expanded_stats,
             }
 
-            # For upcoming games, generate hardcoded example stats for testing
+            # For upcoming games, use placeholder stats (no boxscore data available yet)
             if is_upcoming:
                 if league_key in ['nfl', 'ncaaf']:
-                    # Hardcoded SEA @ NE example stats for layout testing
-                    if away_abbr == 'SEA' and home_abbr == 'NE':
-                        game_data['away_leaders'] = {
-                            'PASS': {'leader_name': 'Geno Smith', 'leader_yards': 215},
-                            'RUSH': {'team_total_yards': 142, 'leader_name': 'Kenneth Walker', 'leader_yards': 87, 'leader_tds': 1},
-                            'REC': {'team_total_yards': 215, 'leader_name': 'DK Metcalf', 'leader_yards': 68, 'leader_tds': 2},
-                            'DEF': {'tackle_leader_name': 'Jordyn Brooks', 'tackle_leader_total': 7,
-                                    'total_sacks': 3, 'forced_fumbles': 1, 'fumble_recoveries': 1, 'interceptions': 2},
-                        }
-                        game_data['home_leaders'] = {
-                            'PASS': {'leader_name': 'Drake Maye', 'leader_yards': 189},
-                            'RUSH': {'team_total_yards': 98, 'leader_name': 'Rhamondre Stevenson', 'leader_yards': 72, 'leader_tds': 0},
-                            'REC': {'team_total_yards': 189, 'leader_name': 'Hunter Henry', 'leader_yards': 54, 'leader_tds': 1},
-                            'DEF': {'tackle_leader_name': 'Ja\'Whaun Bentley', 'tackle_leader_total': 9,
-                                    'total_sacks': 1, 'forced_fumbles': 0, 'fumble_recoveries': 0, 'interceptions': 1},
-                        }
-                    else:
-                        # Generic placeholder for other NFL upcoming games
-                        placeholder = {
-                            'PASS': {'leader_name': 'TBD', 'leader_yards': 0},
-                            'RUSH': {'team_total_yards': 0, 'leader_name': 'TBD', 'leader_yards': 0, 'leader_tds': 0},
-                            'REC': {'team_total_yards': 0, 'leader_name': 'TBD', 'leader_yards': 0, 'leader_tds': 0},
-                            'DEF': {'tackle_leader_name': 'TBD', 'tackle_leader_total': 0,
-                                    'total_sacks': 0, 'forced_fumbles': 0, 'fumble_recoveries': 0, 'interceptions': 0},
-                        }
-                        game_data['home_leaders'] = placeholder
-                        game_data['away_leaders'] = placeholder
+                    placeholder = {
+                        'PASS': {'leader_name': '-', 'leader_yards': 0},
+                        'RUSH': {'team_total_yards': 0, 'leader_name': '-', 'leader_yards': 0, 'leader_tds': 0},
+                        'REC': {'team_total_yards': 0, 'leader_name': '-', 'leader_yards': 0, 'leader_tds': 0},
+                        'DEF': {'tackle_leader_name': '-', 'tackle_leader_total': 0,
+                                'total_sacks': 0, 'forced_fumbles': 0, 'fumble_recoveries': 0, 'interceptions': 0},
+                    }
+                    game_data['home_leaders'] = placeholder
+                    game_data['away_leaders'] = placeholder
                 else:
                     placeholder = {
-                        'PTS': [{'name': 'TBD', 'value': 0}],
-                        'REB': [{'name': 'TBD', 'value': 0}],
-                        'AST': [{'name': 'TBD', 'value': 0}],
+                        'PTS': [{'name': '-', 'value': 0}],
+                        'REB': [{'name': '-', 'value': 0}],
+                        'AST': [{'name': '-', 'value': 0}],
                     }
                     game_data['home_leaders'] = placeholder
                     game_data['away_leaders'] = placeholder
