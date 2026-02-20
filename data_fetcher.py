@@ -883,33 +883,53 @@ class DataFetcher:
         if favorite_teams is None:
             favorite_teams = []
         try:
-            # Get today's date for scoreboard
-            today = datetime.now()
-            year = today.year
-            month = str(today.month).zfill(2)
-            day = str(today.day).zfill(2)
-
-            # NCAA API scoreboard endpoint
-            url = f"{NCAA_API_BASE}/scoreboard/basketball-men/d1/{year}/{month}/{day}"
-            self.logger.debug(f"Fetching NCAA scoreboard from: {url}")
-
-            # Use requests directly since NCAA API isn't cached by api_helper
             import requests
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-            scoreboard = response.json()
 
-            if not scoreboard or 'games' not in scoreboard:
-                self.logger.debug("No scoreboard data from NCAA API")
+            # Fetch games from today and past days until we find some
+            all_games_data = []
+            days_to_check = 7  # Check up to 7 days back
+
+            for days_back in range(days_to_check):
+                check_date = datetime.now() - timedelta(days=days_back)
+                year = check_date.year
+                month = str(check_date.month).zfill(2)
+                day = str(check_date.day).zfill(2)
+
+                # NCAA API scoreboard endpoint
+                url = f"{NCAA_API_BASE}/scoreboard/basketball-men/d1/{year}/{month}/{day}"
+                self.logger.debug(f"Fetching NCAA scoreboard from: {url}")
+
+                try:
+                    response = requests.get(url, timeout=10)
+                    response.raise_for_status()
+                    scoreboard = response.json()
+
+                    if scoreboard and 'games' in scoreboard:
+                        games_list = scoreboard.get('games', [])
+                        self.logger.info(f"Found {len(games_list)} games on {year}/{month}/{day}")
+                        all_games_data.extend(games_list)
+
+                        # If we found live games today, stop looking back
+                        if days_back == 0:
+                            has_live = any(g.get('game', {}).get('gameState') == 'live' for g in games_list)
+                            if has_live:
+                                self.logger.info("Found live games today, not checking past days")
+                                break
+                except Exception as e:
+                    self.logger.debug(f"Error fetching {year}/{month}/{day}: {e}")
+                    continue
+
+            if not all_games_data:
+                self.logger.debug("No scoreboard data from NCAA API for past 7 days")
                 return []
 
             # Extract live and finished games
             live_games = []
             finished_games = []
-            total_events = len(scoreboard.get('games', []))
-            self.logger.debug(f"Processing {total_events} total NCAA games")
+            total_events = len(all_games_data)
+            self.logger.debug(f"Processing {total_events} total NCAA games from past {days_to_check} days")
 
-            for game_wrapper in scoreboard.get('games', []):
+            for game_wrapper in all_games_data:
                 game = game_wrapper.get('game', {})
                 game_state = game.get('gameState', '')
                 game_id = game.get('gameID')
