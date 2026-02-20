@@ -89,13 +89,13 @@ class DataFetcher:
                 return []
 
             # Process events from scoreboard
-            live_games, upcoming_event = self._process_nfl_events(
+            live_games, finished_games, upcoming_event = self._process_nfl_events(
                 scoreboard.get('events', []), league_key, max_games,
                 favorite_teams, favorite_team_expanded_stats
             )
 
             # NFL: if nothing usable found today, fetch next 7 days
-            if not live_games and not upcoming_event and league_key == 'nfl':
+            if not live_games and not finished_games and not upcoming_event and league_key == 'nfl':
                 today = datetime.now()
                 end_date = today + timedelta(days=7)
                 date_range = f"{today.strftime('%Y%m%d')}-{end_date.strftime('%Y%m%d')}"
@@ -111,18 +111,24 @@ class DataFetcher:
                 )
 
                 if scoreboard and 'events' in scoreboard:
-                    live_games, upcoming_event = self._process_nfl_events(
+                    live_games, finished_games, upcoming_event = self._process_nfl_events(
                         scoreboard.get('events', []), league_key, max_games,
                         favorite_teams, favorite_team_expanded_stats
                     )
 
-            # NFL: if no live games, include the next upcoming game with placeholder stats
-            if not live_games and upcoming_event and league_key == 'nfl':
+            # Combine results: live games first, then finished games
+            all_games = live_games + finished_games
+
+            # NFL: if no live or finished games, include the next upcoming game with placeholder stats
+            if not all_games and upcoming_event and league_key == 'nfl':
                 game_info = self._parse_game_event(upcoming_event, league_key, favorite_teams, favorite_team_expanded_stats,
                                                    is_upcoming=True)
                 if game_info:
-                    live_games.append(game_info)
+                    all_games.append(game_info)
                     self.logger.info(f"Added upcoming NFL game: {game_info.get('away_abbr')} @ {game_info.get('home_abbr')}")
+
+            # Replace live_games with combined list for return
+            live_games = all_games
 
             self.logger.info(f"Found {len(live_games)} games in {league_key} (max={max_games})")
             return live_games
@@ -134,7 +140,7 @@ class DataFetcher:
     def _process_nfl_events(self, events: list, league_key: str, max_games: int,
                             favorite_teams: List[str], favorite_team_expanded_stats: bool):
         """
-        Process ESPN events to find live games and upcoming events.
+        Process ESPN events to find live, finished, and upcoming games.
 
         Args:
             events: List of ESPN event dicts
@@ -144,18 +150,15 @@ class DataFetcher:
             favorite_team_expanded_stats: Show expanded stats for favorites
 
         Returns:
-            Tuple of (live_games list, upcoming_event or None)
+            Tuple of (live_games list, finished_games list, upcoming_event or None)
         """
         live_games = []
+        finished_games = []
         upcoming_event = None
 
         self.logger.debug(f"Processing {len(events)} total events for {league_key}")
 
         for event in events:
-            if len(live_games) >= max_games:
-                self.logger.info(f"Reached max_games limit ({max_games}) for {league_key}")
-                break
-
             status_state = event.get('status', {}).get('type', {}).get('state')
             status_detail = event.get('status', {}).get('type', {}).get('detail', '')
 
@@ -166,26 +169,37 @@ class DataFetcher:
                 home = comps[1].get('team', {}).get('abbreviation', '?')
                 self.logger.info(f"Game: {away} @ {home}, Status: {status_state} ({status_detail})")
 
-            if status_state == 'in':
-                game_info = self._parse_game_event(event, league_key, favorite_teams, favorite_team_expanded_stats)
-                if game_info:
-                    live_games.append(game_info)
-                    self.logger.info(f"Parsed live game: {game_info.get('away_abbr')} @ {game_info.get('home_abbr')}")
-            elif status_state == 'pre' and upcoming_event is None and league_key == 'nfl':
-                # Skip Pro Bowl / all-star games
-                is_allstar = False
-                for c in comps:
-                    abbr = c.get('team', {}).get('abbreviation', '')
-                    if abbr in ('AFC', 'NFC'):
-                        is_allstar = True
-                        break
-                if not is_allstar:
-                    upcoming_event = event
+            # Skip Pro Bowl / all-star games
+            is_allstar = False
+            for c in comps:
+                abbr = c.get('team', {}).get('abbreviation', '')
+                if abbr in ('AFC', 'NFC'):
+                    is_allstar = True
+                    break
+            if is_allstar:
+                continue
 
-        return live_games, upcoming_event
+            if status_state == 'in':
+                if len(live_games) < max_games:
+                    game_info = self._parse_game_event(event, league_key, favorite_teams, favorite_team_expanded_stats)
+                    if game_info:
+                        live_games.append(game_info)
+                        self.logger.info(f"Parsed live game: {game_info.get('away_abbr')} @ {game_info.get('home_abbr')}")
+            elif status_state == 'post':
+                # Finished game
+                game_info = self._parse_game_event(event, league_key, favorite_teams, favorite_team_expanded_stats,
+                                                   is_finished=True)
+                if game_info:
+                    finished_games.append(game_info)
+                    self.logger.info(f"Parsed finished game: {game_info.get('away_abbr')} @ {game_info.get('home_abbr')}")
+            elif status_state == 'pre' and upcoming_event is None and league_key == 'nfl':
+                upcoming_event = event
+
+        return live_games, finished_games, upcoming_event
 
     def _parse_game_event(self, event: Dict, league_key: str, favorite_teams: List[str] = None,
-                         favorite_team_expanded_stats: bool = True, is_upcoming: bool = False) -> Optional[Dict]:
+                         favorite_team_expanded_stats: bool = True, is_upcoming: bool = False,
+                         is_finished: bool = False) -> Optional[Dict]:
         """
         Parse a game event and extract relevant information.
 
@@ -195,6 +209,7 @@ class DataFetcher:
             favorite_teams: List of favorite team abbreviations
             favorite_team_expanded_stats: Show expanded stats for favorite team games
             is_upcoming: If True, this is an upcoming game (generate placeholder stats)
+            is_finished: If True, this is a finished game (show "Final" status)
 
         Returns:
             Dictionary with game info and stat leaders, or None if parsing fails
@@ -225,9 +240,13 @@ class DataFetcher:
                 is_favorite = home_abbr.upper() in [t.upper() for t in favorite_teams] or \
                              away_abbr.upper() in [t.upper() for t in favorite_teams]
 
-            # Format period indicator based on league
+            # Format period indicator based on league and game state
             period = status.get('period', 0)
-            if league_key in ['nba', 'nfl']:
+            if is_finished:
+                period_indicator = "Final"
+            elif is_upcoming:
+                period_indicator = "Upcoming"
+            elif league_key in ['nba', 'nfl']:
                 # NBA/NFL: Q1, Q2, Q3, Q4
                 period_indicator = f"Q{period}" if period > 0 else ""
             elif league_key in ['ncaam', 'ncaaf']:
@@ -277,7 +296,6 @@ class DataFetcher:
                     }
                     game_data['home_leaders'] = placeholder
                     game_data['away_leaders'] = placeholder
-                game_data['period_text'] = 'Upcoming'
                 return game_data
 
             # Fetch detailed boxscore for player stats
