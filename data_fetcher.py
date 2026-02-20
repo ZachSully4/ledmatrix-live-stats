@@ -903,17 +903,13 @@ class DataFetcher:
                 self.logger.debug("No scoreboard data from NCAA API")
                 return []
 
-            # Extract live games
+            # Extract live and finished games
             live_games = []
+            finished_games = []
             total_events = len(scoreboard.get('games', []))
             self.logger.debug(f"Processing {total_events} total NCAA games")
 
             for game_wrapper in scoreboard.get('games', []):
-                # Stop if we've reached max games
-                if len(live_games) >= max_games:
-                    self.logger.info(f"Reached max_games limit ({max_games}) for NCAA")
-                    break
-
                 game = game_wrapper.get('game', {})
                 game_state = game.get('gameState', '')
                 game_id = game.get('gameID')
@@ -923,8 +919,8 @@ class DataFetcher:
                 home_name = game.get('home', {}).get('names', {}).get('char6', '?')
                 self.logger.info(f"NCAA Game: {away_name} @ {home_name}, State: {game_state}")
 
-                # Only process live games
-                if game_state != 'live':
+                # Only process live or finished games
+                if game_state not in ('live', 'final'):
                     continue
 
                 # Check power conference filter
@@ -946,15 +942,25 @@ class DataFetcher:
                         continue
 
                 # Parse game data
-                game_info = self._parse_ncaa_game(game, is_favorite_game, favorite_team_expanded_stats)
+                is_finished = (game_state == 'final')
+                game_info = self._parse_ncaa_game(game, is_favorite_game, favorite_team_expanded_stats, is_finished)
                 if game_info:
-                    live_games.append(game_info)
-                    self.logger.info(f"Parsed NCAA game: {game_info.get('away_abbr')} @ {game_info.get('home_abbr')}, "
-                                   f"home_leaders: {bool(game_info.get('home_leaders'))}, "
-                                   f"away_leaders: {bool(game_info.get('away_leaders'))}")
+                    if is_finished:
+                        finished_games.append(game_info)
+                        self.logger.info(f"Parsed finished NCAA game: {game_info.get('away_abbr')} @ {game_info.get('home_abbr')}")
+                    else:
+                        live_games.append(game_info)
+                        self.logger.info(f"Parsed live NCAA game: {game_info.get('away_abbr')} @ {game_info.get('home_abbr')}")
 
-            self.logger.info(f"Found {len(live_games)} live NCAA games (out of {total_events} total, max={max_games})")
-            return live_games
+                # Stop if we've reached max games (live + finished combined)
+                if len(live_games) + len(finished_games) >= max_games:
+                    self.logger.info(f"Reached max_games limit ({max_games}) for NCAA")
+                    break
+
+            # Combine: live games first, then finished games
+            all_games = live_games + finished_games
+            self.logger.info(f"Found {len(live_games)} live + {len(finished_games)} finished NCAA games (out of {total_events} total, max={max_games})")
+            return all_games
 
         except Exception as e:
             self.logger.error(f"Error fetching NCAA games: {e}", exc_info=True)
@@ -1007,7 +1013,8 @@ class DataFetcher:
             self.logger.debug(f"Error checking power conference: {e}")
             return False  # If can't determine, don't filter out
 
-    def _parse_ncaa_game(self, game: Dict, is_favorite: bool = False, expanded_stats: bool = False) -> Optional[Dict]:
+    def _parse_ncaa_game(self, game: Dict, is_favorite: bool = False, expanded_stats: bool = False,
+                         is_finished: bool = False) -> Optional[Dict]:
         """
         Parse NCAA game data and fetch boxscore for player stats.
 
@@ -1015,6 +1022,7 @@ class DataFetcher:
             game: Game dictionary from NCAA API scoreboard
             is_favorite: True if this game involves a favorite team
             expanded_stats: True to extract expanded stats (STL, BLK)
+            is_finished: True if this is a finished game
 
         Returns:
             Dictionary with game info and stat leaders, or None if parsing fails
@@ -1023,6 +1031,12 @@ class DataFetcher:
             game_id = game.get('gameID')
             home = game.get('home', {})
             away = game.get('away', {})
+
+            # Determine period text
+            if is_finished:
+                period_text = 'Final'
+            else:
+                period_text = game.get('currentPeriod', '')
 
             # Extract basic game info
             game_data = {
@@ -1039,8 +1053,8 @@ class DataFetcher:
                 'home_score': int(home.get('score', 0)),
                 'away_score': int(away.get('score', 0)),
                 'period': 0,  # NCAA API uses currentPeriod text
-                'clock': game.get('contestClock', ''),
-                'period_text': game.get('currentPeriod', ''),  # NCAA provides formatted period text like "1st Half"
+                'clock': game.get('contestClock', '') if not is_finished else '',
+                'period_text': period_text,
                 'is_favorite': is_favorite,
                 'expanded_stats': is_favorite and expanded_stats,
             }
