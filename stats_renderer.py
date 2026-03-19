@@ -954,86 +954,113 @@ class StatsRenderer:
             if not logo_dir_name or not team_abbr:
                 return None
 
-            # NCAA abbreviation mapping (NCAA API char6 → logo filename)
-            # The NCAA API returns 6-char codes but logos use short codes
+            # NCAA abbreviation mapping (NCAA API char6 → logo filename from all_team_abbreviations.txt)
             if league in ['ncaam', 'ncaaf']:
                 ncaa_map = {
-                    # Power 5 - Big 12
-                    'KANSAS': 'KU', 'OKLA': 'OU', 'OKLAST': 'OKST', 'TEXAST': 'TEX',
-                    'TCU': 'TCU', 'BAYLOR': 'BAY', 'TX A&M': 'TAMU', 'TX ST': 'TXST',
-                    # Power 5 - Big Ten
-                    'IOWA': 'IOWA', 'ILL': 'ILL', 'IND': 'IU', 'MD': 'MD',
-                    'MICH': 'MICH', 'MICHST': 'MSU', 'MINN': 'MINN', 'NEB': 'NEB',
-                    'NW': 'NW', 'OHIOST': 'OSU', 'PENNST': 'PSU', 'PURDUE': 'PUR',
-                    'RUTGER': 'RUTG', 'WISC': 'WISC', 'WISCON': 'WISC',
-                    # Power 5 - ACC
-                    'BC': 'BC', 'CLEM': 'CLEM', 'DUKE': 'DUKE', 'FSU': 'FSU',
-                    'GATECH': 'GT', 'LOU': 'LOU', 'MIAMI': 'MIA', 'UNC': 'UNC',
-                    'NCSU': 'NCST', 'PITT': 'PITT', 'SYR': 'SYR', 'UVA': 'UVA',
-                    'VT': 'VT', 'WAKE': 'WAKE',
-                    # Power 5 - SEC
-                    'ALA': 'ALA', 'ARK': 'ARK', 'AUBURN': 'AUB', 'AUB': 'AUB',
-                    'FLA': 'FLA', 'UGA': 'UGA', 'KENTKY': 'UK', 'LSU': 'LSU',
-                    'MISS': 'MISS', 'MISSST': 'MSST', 'MIZZOU': 'MIZ', 'SC': 'SC',
-                    'TENN': 'TENN', 'VANDY': 'VAN', 'VAND': 'VAN',
-                    # Power 5 - Pac-12 / Big 12 expansion
-                    'ARIZ': 'ARIZ', 'ARIZST': 'ASU', 'CAL': 'CAL', 'COLO': 'COLO',
-                    'CO ST': 'CSU', 'OREG': 'ORE', 'ORST': 'ORST', 'STAN': 'STAN',
-                    'UCLA': 'UCLA', 'USC': 'USC', 'UTAH': 'UTAH', 'WASH': 'WASH',
-                    'WASHST': 'WSU', 'WSU': 'WSU',
-                    # Big East
-                    'GTOWN': 'GTWN', 'NOVA': 'VILL', 'SETON': 'SHU', 'MARQ': 'MARQ',
-                    'BUTLER': 'BU', 'CREIGH': 'CRE', 'STJOHN': 'SHU', 'DEPAUL': 'DEP',
-                    'UCONN': 'CONN',
-                    # Mountain West
-                    'BOISE': 'BOIS', 'SDAKST': 'SDSU', 'UNLV': 'UNLV', 'NEWMEX': 'UNM',
-                    'FRESST': 'FRES', 'NEVADA': 'NEV', 'UTAH ST': 'USU', 'UT ST': 'USU',
-                    # WCC
-                    'GONZ': 'GONZ', 'STMARY': 'SMC', 'BYU': 'BYU', 'S FRAN': 'USF',
-                    'PACIF': 'PACIF', 'PORTST': 'PORT',
-                    # American / AAC
-                    'SMU': 'SMU', 'HOU': 'HOU', 'UCF': 'UCF', 'TEMPLE': 'TEM',
-                    'TULSA': 'TLSA', 'TULANE': 'TUL', 'MEM': 'MEM', 'MEMPH': 'MEM',
-                    'W KY': 'WKU', 'FAU': 'FAU', 'UAB': 'UAB', 'USF': 'USF',
-                    # A-10
-                    'DAYTON': 'DAY', 'VCU': 'VCU', 'DUQSNE': 'DUQSNE', 'ST LOU': 'SLU',
-                    'RHODE': 'URI', 'URI': 'URI', 'GMU': 'GMU', 'FORDHM': 'FDU',
-                    'RICH': 'RICH', 'DAVID': 'DAV', 'LASALL': 'LAS', 'STJOES': 'STBONA',
-                    # MAC
-                    'AKRON': 'AKR', 'BGSU': 'BGSU', 'BUFFALO': 'BUFF', 'BUFF': 'BUFF',
-                    'TOLEDO': 'TOL', 'EMICH': 'EMU', 'BALLST': 'BALL', 'KENT': 'KENT',
-                    'MIA OH': 'MIA', 'OHIO': 'OHIO', 'WMU': 'WMU', 'CMU': 'CMU',
-                    'NIU': 'NIU',
-                    # Sun Belt
-                    'APP ST': 'APP', 'GA SOU': 'GASO', 'GA ST': 'GAST', 'TROY': 'TROY',
-                    'S ALA': 'USA', 'ARST': 'ARST', 'ARK ST': 'ARST', 'TXST': 'TXST',
-                    'LA': 'UL', 'LATECH': 'LT', 'MARSH': 'MRSH', 'JMU': 'JMU',
-                    # C-USA
-                    'CHAR': 'CLT', 'FIU': 'FIU', 'MTSU': 'MTSU', 'NO TEX': 'UNT',
-                    'UTSA': 'UTSA', 'UTEP': 'UTEP', 'RICE': 'RICE',
-                    # MVC
-                    'BRAD': 'BRAD', 'DRAKE': 'DEN', 'EVANS': 'EVANS', 'ILL ST': 'ISU',
-                    'IND ST': 'ISU', 'MO ST': 'MOST', 'N IOWA': 'NOR', 'SIU': 'SIU',
-                    'VALPO': 'VALPO', 'LOYCHI': 'LOY MD',
-                    # Ivy League
-                    'BROWN': 'BRST', 'CORNELL': 'COR', 'DARTMO': 'DAR', 'HARVAR': 'HAR',
-                    'PENN': 'PENN', 'PRINCE': 'PRI', 'YALE': 'YALE', 'COLUMB': 'COL',
-                    # Independents / Others
-                    'ARMY': 'ARMY', 'NAVY': 'NAVY', 'AIRFOR': 'AFA', 'ND': 'ND',
-                    'LIBRTY': 'LIB', 'VERMNT': 'UVM',
-                    # More teams from API
-                    'HAWAII': 'HAW', 'CALPLY': 'CP', 'NIAGRA': 'NIAG', 'MTSTMY': 'MOST',
-                    'RIDER': 'RIDER', 'CANISI': 'CAN', 'ALBANY': 'ALB', 'SEATTL': 'SEA',
-                    'SAMHOU': 'SHSU', 'TNTECH': 'TTU', 'MURRAY': 'MUR', 'E KY': 'EKU',
-                    'WICHST': 'WICHST', 'TARLET': 'TARLET', 'TENNST': 'TNST',
-                    'JAX ST': 'JXST', 'KENSAW': 'KENN', 'N KY': 'NKY', 'WRIGHT': 'WRIGHT',
-                    'CSFULL': 'CSUF', 'UC IRV': 'UCI', 'LBSU': 'LBSU', 'UCSB': 'UCSB',
-                    'UC DAV': 'UCD', 'UC RIV': 'UCR', 'HIGHPT': 'HP', 'CAMPBL': 'CAMP',
-                    'LONGWD': 'LONG', 'RADFRD': 'RAD', 'WINTHR': 'WIN', 'PRESBY': 'PRES',
-                    'CHAR': 'CHAR', 'SIENA': 'SIENA', 'MARIST': 'MAR', 'MANHAT': 'MAN',
-                    'IONA': 'IONA', 'FAIR': 'FAIR', 'STBONA': 'STBONA', 'SIUE': 'SIUE',
-                    'BELLAR': 'BEL', 'LIPSCO': 'LIP', 'STETSON': 'STET', 'STETSN': 'STET',
-                    'JVILLE': 'JAX', 'KENSAW': 'KSU', 'FLA': 'UF', 'FLORIDA': 'UF',
+                    # A
+                    'A PEAY': 'APSU', 'AKRON': 'AKR', 'AL A&M': 'AAMU', 'ALA': 'ALA',
+                    'ALA ST': 'ALST', 'ALBANY': 'ALB', 'AMER': 'AMER', 'APP ST': 'APP',
+                    'ARIZ': 'ARIZ', 'ARIZST': 'ASU', 'ARK': 'ARK', 'ARK PB': 'UAPB',
+                    'ARK ST': 'ARST', 'ARMY': 'ARMY', 'AUBURN': 'AUB',
+                    # B
+                    'BALLST': 'BALL', 'BAYLOR': 'BAY', 'BC': 'BC', 'BECOOK': 'BEL',
+                    'BELLAR': 'BELL', 'BGSU': 'BGSU', 'BINGHA': 'BING', 'BOISE': 'BSU',
+                    'BRAD': 'BRAD', 'BROWN': 'BRWN', 'BROWN': 'BRWN', 'BRYANT': 'BRY',
+                    'BUCKNL': 'BUCK', 'BUTLER': 'BUT', 'BYU': 'BYU',
+                    # C
+                    'C ARK': 'UCA', 'C CONN': 'CCSU', 'C OF C': 'COFC', 'CALBAP': 'GCU',
+                    'CALPLY': 'CP', 'CAMPBL': 'CAM', 'CANISI': 'CAN', 'CHAR': 'CHAR',
+                    'CHAT': 'UTC', 'CHI ST': 'CHIC', 'CITDEL': 'CIT', 'CLE ST': 'CLEV',
+                    'CLEM': 'CLEM', 'CO CAR': 'CCAR', 'CO ST': 'CSU', 'CREIGH': 'CREI',
+                    'CSFULL': 'CSUF', 'CSUBAK': 'CSUB', 'CSUN': 'CSUN',
+                    # D
+                    'DAVID': 'DAV', 'DAYTON': 'DAY', 'DEL': 'DEL', 'DENVER': 'DEN',
+                    'DEPAUL': 'DEP', 'DET': 'DET', 'DRAKE': 'DRKE', 'DREXEL': 'DREX',
+                    'DUKE': 'DUKE', 'DUQSNE': 'DUQ',
+                    # E
+                    'E CAR': 'ECU', 'E ILL': 'EIU', 'E KY': 'EKU', 'E WASH': 'EWU',
+                    'ETSU': 'ETSU', 'EVANS': 'EVAN',
+                    # F
+                    'FAIR': 'FAIR', 'FAU': 'FAU', 'FDU': 'FDU', 'FGCU': 'FGCU',
+                    'FIU': 'FIU', 'FL A&M': 'FAMU', 'FORDHM': 'FOR', 'FRESST': 'FRES',
+                    'FSU': 'FSU', 'FURMAN': 'FUR',
+                    # G
+                    'G WEBB': 'GWEB', 'G WASH': 'GW', 'GA SOU': 'GASO', 'GA ST': 'GAST',
+                    'GATECH': 'GT', 'GMU': 'GMU', 'GONZ': 'GONZ', 'GRNBAY': 'GB',
+                    'GTOWN': 'GTWN',
+                    # H
+                    'HAMPTN': 'HAMP', 'HAWAII': 'HAW', 'HIGHPT': 'HP', 'HOFSTR': 'HOF',
+                    'HOLYCR': 'HC', 'HOU': 'HOU', 'HOWARD': 'HOW',
+                    # I
+                    'ID ST': 'IDST', 'IDAHO': 'IDHO', 'ILL': 'ILL', 'ILL ST': 'ILST',
+                    'IND': 'IU', 'IND ST': 'INST', 'IONA': 'IONA', 'IPFW': 'PFW',
+                    'IUINDY': 'IUPU',
+                    # J
+                    'JAX ST': 'JVST', 'JMU': 'JMU', 'JVILLE': 'JAX',
+                    # K
+                    'KANSAS': 'KU', 'KC': 'UMKC', 'KENSAW': 'KENN', 'KENT': 'KENT',
+                    # L
+                    'LA': 'ULL', 'LA MON': 'ULL', 'LAFAYE': 'LAF', 'LASALL': 'LAS',
+                    'LATECH': 'LT', 'LBSU': 'LBSU', 'LEHIGH': 'LEH', 'LEMOYN': 'MRMK',
+                    'LIBRTY': 'LIB', 'LINWOD': 'LIU', 'LIPSCO': 'LIP', 'LIU': 'LIU',
+                    'LONGWD': 'LONG', 'LOY MD': 'L-MD', 'LOYCHI': 'LUC', 'LOUIS': 'LOU',
+                    # M
+                    'MANHAT': 'MAN', 'MARIST': 'MRST', 'MARQ': 'MARQ', 'MARSH': 'MRSH',
+                    'MD': 'MD', 'MEM': 'MEM', 'MEMPH': 'MEM', 'MERCER': 'MER',
+                    'MERCYH': 'MRMK', 'MIA OH': 'M-OH', 'MICH': 'MICH', 'MICHST': 'MSU',
+                    'MIDTEN': 'MTU', 'MILWKE': 'MILW', 'MINN': 'MINN', 'MISS': 'MISS',
+                    'MISSST': 'MSST', 'MIZZOU': 'MIZ', 'MO ST': 'MOST', 'MONMTH': 'MONM',
+                    'MONT': 'MONT', 'MONTST ': 'MTST', 'MOREST': 'MORE', 'MS VAL': 'MVSU',
+                    'MTSTMY': 'MSM', 'MURRAY': 'MUR',
+                    # N
+                    'N ALA': 'UNA', 'N IOWA': 'UNI', 'N KY': 'NKU', 'N MEX': 'UNM',
+                    'NAVY': 'NAVY', 'NC A&T': 'NCAT', 'NC CEN': 'NCCU', 'NC ST': 'NCST',
+                    'ND ST': 'NDSU', 'NEB': 'NEB', 'NEVADA': 'NEV', 'NEWHAV': 'NE',
+                    'NIAGRA': 'NIAG', 'NJIT': 'NJIT', 'NO DAK': 'UND', 'NO FLA': 'UNF',
+                    'NO TEX': 'UNT', 'NOEAST': 'NE', 'NW': 'NW',
+                    # O
+                    'OAK': 'OAK', 'OKLA': 'OU', 'OKLAST': 'OKST', 'OMAHA': 'OMAHA',
+                    'ORU': 'ORU',
+                    # P
+                    'PACIF': 'PAC', 'PENNST': 'PSU', 'PEPPER': 'PEPP', 'PORT': 'PORT',
+                    'PORTST': 'PRST', 'PRESBY': 'PRES', 'PRINCE': 'PRIN', 'PURDUE': 'PUR',
+                    'PV A&M': 'PVAM',
+                    # Q
+                    'QUENNC': 'QUIN',
+                    # R
+                    'RADFRD': 'RAD', 'RICH': 'RICH', 'RIDER': 'RID', 'RUTGER': 'RUTG',
+                    # S
+                    'S ALA': 'USA', 'S FRAN': 'SFU', 'S IND': 'SIND', 'S UTAH': 'SUU',
+                    'SAC ST': 'SAC', 'SACHRT': 'SFBK', 'SAMFRD': 'SAM', 'SAMHOU': 'SHSU',
+                    'SC': 'SC', 'SC ST': 'SCST', 'SC UPS': 'SCUP', 'SDAKST': 'SDSU',
+                    'SEATTL': 'SEAT', 'SETON': 'HALL', 'SFA': 'SFPA', 'SIENA': 'SIE',
+                    'SIU': 'SIU', 'SIUE': 'SIUE', 'SMU': 'SMU', 'SO DAK': 'SDAK',
+                    'ST LOU': 'SLU', 'ST PTR': 'SPU', 'STBONA': 'SBU', 'STETSN': 'STET',
+                    'STFRPA': 'SFPA', 'STJOES': 'JOES', 'STJOHN': 'SJU', 'STMARY': 'SMC',
+                    'STONEH': 'SHU', 'STTHOM': 'STTHOM',
+                    # T
+                    'TARLET': 'TAR', 'TCU': 'TCU', 'TEMPLE': 'TEM', 'TENN': 'TENN',
+                    'TENNST': 'TNST', 'TEXAS': 'TEX', 'TNTECH': 'TNTC', 'TROY': 'TROY',
+                    'TULANE': 'TULN', 'TULSA': 'TLSA', 'TX A&M': 'TA&M', 'TX ARL': 'UTA',
+                    'TX SOU': 'TXSO', 'TX ST': 'TXST',
+                    # U
+                    'UAB': 'UAB', 'UALR': 'UALR', 'UC DAV': 'UCD', 'UC IRV': 'UCI',
+                    'UC RIV': 'UCR', 'UCONN': 'CONN', 'UCSB': 'UCSB', 'UGA': 'UGA',
+                    'UIC': 'UIC', 'UMASSL': 'MASS', 'UMBC': 'UMBC', 'UNC': 'UNC',
+                    'UNC A': 'UNCA', 'UNC G': 'UNCG', 'UNCW': 'UNCW', 'UNH': 'UNH',
+                    'UNLV': 'UNLV', 'USC': 'USC', 'USF': 'USF', 'UT MAR': 'UTM',
+                    'UT ST': 'USU', 'UT VAL': 'UVU', 'UTAH': 'UTAH', 'UTSA': 'UTSA',
+                    'UTTECH': 'TNTC', 'UVA': 'UVA',
+                    # V
+                    'VALPO': 'VALP', 'VANDY': 'VAN', 'VCU': 'VCU', 'VERMNT': 'UVM',
+                    'VMI': 'VMI',
+                    # W
+                    'W CAR': 'WCU', 'W ILL': 'WIU', 'W KY': 'WKU', 'WAGNER': 'WAG',
+                    'WAKE': 'WAKE', 'WASHST': 'WSU', 'WEB ST': 'WEB', 'WICHST': 'WICH',
+                    'WINTHR': 'WIN', 'WISC': 'WISC', 'WM&MRY': 'W&M', 'WOFFRD': 'WOF',
+                    'WRIGHT': 'WRST', 'WVU': 'WVU',
+                    # Y
+                    'YALE': 'YALE', 'YSU': 'YSU',
                 }
                 original_abbr = team_abbr
                 team_abbr = ncaa_map.get(team_abbr, team_abbr)
