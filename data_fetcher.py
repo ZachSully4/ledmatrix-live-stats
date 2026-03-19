@@ -46,7 +46,8 @@ class DataFetcher:
         self.cache_manager = cache_manager
         self.logger = logger
 
-    def fetch_live_games(self, league_key: str, max_games: int = 50, power_conferences_only: bool = False,
+    def fetch_live_games(self, league_key: str, max_games: int = 50, max_finished_games: int = 3,
+                        power_conferences_only: bool = False,
                         favorite_teams: List[str] = None, favorite_team_expanded_stats: bool = True) -> List[Dict]:
         """
         Fetch live games for a specific league.
@@ -67,7 +68,7 @@ class DataFetcher:
 
         # Use NCAA API for college basketball (better player stats)
         if league_key == 'ncaam':
-            return self._fetch_ncaa_basketball_games(max_games, power_conferences_only, favorite_teams, favorite_team_expanded_stats)
+            return self._fetch_ncaa_basketball_games(max_games, max_finished_games, power_conferences_only, favorite_teams, favorite_team_expanded_stats)
 
         sport, league = LEAGUE_MAP[league_key]
 
@@ -90,7 +91,7 @@ class DataFetcher:
 
             # Process events from scoreboard
             live_games, finished_games, upcoming_event = self._process_nfl_events(
-                scoreboard.get('events', []), league_key, max_games,
+                scoreboard.get('events', []), league_key, max_games, max_finished_games,
                 favorite_teams, favorite_team_expanded_stats
             )
 
@@ -112,7 +113,7 @@ class DataFetcher:
 
                 if scoreboard and 'events' in scoreboard:
                     live_games, finished_games, upcoming_event = self._process_nfl_events(
-                        scoreboard.get('events', []), league_key, max_games,
+                        scoreboard.get('events', []), league_key, max_games, max_finished_games,
                         favorite_teams, favorite_team_expanded_stats
                     )
 
@@ -137,7 +138,7 @@ class DataFetcher:
             self.logger.error(f"Error fetching live games for {league_key}: {e}", exc_info=True)
             return []
 
-    def _process_nfl_events(self, events: list, league_key: str, max_games: int,
+    def _process_nfl_events(self, events: list, league_key: str, max_games: int, max_finished_games: int,
                             favorite_teams: List[str], favorite_team_expanded_stats: bool):
         """
         Process ESPN events to find live, finished, and upcoming games.
@@ -186,12 +187,13 @@ class DataFetcher:
                         live_games.append(game_info)
                         self.logger.info(f"Parsed live game: {game_info.get('away_abbr')} @ {game_info.get('home_abbr')}")
             elif status_state == 'post':
-                # Finished game
-                game_info = self._parse_game_event(event, league_key, favorite_teams, favorite_team_expanded_stats,
-                                                   is_finished=True)
-                if game_info:
-                    finished_games.append(game_info)
-                    self.logger.info(f"Parsed finished game: {game_info.get('away_abbr')} @ {game_info.get('home_abbr')}")
+                # Finished game (cap at max_finished_games)
+                if len(finished_games) < max_finished_games:
+                    game_info = self._parse_game_event(event, league_key, favorite_teams, favorite_team_expanded_stats,
+                                                       is_finished=True)
+                    if game_info:
+                        finished_games.append(game_info)
+                        self.logger.info(f"Parsed finished game: {game_info.get('away_abbr')} @ {game_info.get('home_abbr')}")
             elif status_state == 'pre' and upcoming_event is None and league_key == 'nfl':
                 upcoming_event = event
 
@@ -866,7 +868,8 @@ class DataFetcher:
         # Single name or unknown - truncate if too long
         return full_name[:10] if len(full_name) > 10 else full_name
 
-    def _fetch_ncaa_basketball_games(self, max_games: int = 50, power_conferences_only: bool = False,
+    def _fetch_ncaa_basketball_games(self, max_games: int = 50, max_finished_games: int = 3,
+                                     power_conferences_only: bool = False,
                                      favorite_teams: List[str] = None, favorite_team_expanded_stats: bool = True) -> List[Dict]:
         """
         Fetch live NCAA Men's Basketball games using NCAA API.
@@ -963,6 +966,8 @@ class DataFetcher:
 
                 # Parse game data
                 is_finished = (game_state == 'final')
+                if is_finished and len(finished_games) >= max_finished_games:
+                    continue
                 game_info = self._parse_ncaa_game(game, is_favorite_game, favorite_team_expanded_stats, is_finished)
                 if game_info:
                     if is_finished:

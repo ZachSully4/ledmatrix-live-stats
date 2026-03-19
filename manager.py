@@ -202,6 +202,7 @@ class LivePlayerStatsPlugin(BasePlugin):
         """
         data_settings = self.config.get('data_settings', {})
         max_games = data_settings.get('max_games_per_league', 50)
+        max_finished_games = data_settings.get('max_finished_games', 3)
         favorite_teams = data_settings.get('favorite_teams', [])
         favorite_team_expanded_stats = data_settings.get('favorite_team_expanded_stats', True)
 
@@ -222,6 +223,7 @@ class LivePlayerStatsPlugin(BasePlugin):
             live_games = self.data_fetcher.fetch_live_games(
                 league_key,
                 max_games=max_games,
+                max_finished_games=max_finished_games,
                 power_conferences_only=power_conferences_only,
                 favorite_teams=favorite_teams,
                 favorite_team_expanded_stats=favorite_team_expanded_stats

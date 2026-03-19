@@ -58,6 +58,13 @@
           "maximum": 100,
           "description": "Maximum number of games to display per league (lower values = faster updates)"
         },
+        "max_finished_games": {
+          "type": "integer",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 20,
+          "description": "Maximum number of finished/past games to show per league"
+        },
         "favorite_teams": {
           "type": "array",
           "items": {"type": "string"},

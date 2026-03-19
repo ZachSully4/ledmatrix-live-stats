@@ -1014,12 +1014,12 @@ class StatsRenderer:
                     'MTSTMY': 'MSM', 'MURRAY': 'MUR',
                     # N
                     'N ALA': 'UNA', 'N IOWA': 'UNI', 'N KY': 'NKU', 'N MEX': 'UNM',
-                    'NAVY': 'NAVY', 'NC A&T': 'NCAT', 'NC CEN': 'NCCU', 'NC ST': 'NCST',
+                    'NAVY': 'NAVY', 'NC A&T': 'NCAT', 'NC CEN': 'NCCU', 'NC ST': 'NCSU',
                     'ND ST': 'NDSU', 'NEB': 'NEB', 'NEVADA': 'NEV', 'NEWHAV': 'NE',
                     'NIAGRA': 'NIAG', 'NJIT': 'NJIT', 'NO DAK': 'UND', 'NO FLA': 'UNF',
                     'NO TEX': 'UNT', 'NOEAST': 'NE', 'NW': 'NW',
                     # O
-                    'OAK': 'OAK', 'OKLA': 'OU', 'OKLAST': 'OKST', 'OMAHA': 'OMAHA',
+                    'OAK': 'OAK', 'OHIOST': 'OSU', 'OKLA': 'OU', 'OKLAST': 'OKST', 'OMAHA': 'OMAHA',
                     'ORU': 'ORU',
                     # P
                     'PACIF': 'PAC', 'PENNST': 'PSU', 'PEPPER': 'PEPP', 'PORT': 'PORT',
